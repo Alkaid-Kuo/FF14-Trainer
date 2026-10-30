@@ -20,6 +20,7 @@ const THEMES = {
   p1: { sky: ['#3f86c8', '#9fcbe6', '#dcecf4'], fog: 0x9fc6de, fogNear: 70, fogFar: 260, hemi: [0xdff0ff, 0x46564c, 1.15], sun: [0xfff1d8, 2.1], floor: 'wind', wall: 0x9ff2ff, below: 'clouds' },
   p2: { sky: ['#140302', '#5a1405', '#ff6a1a'], fog: 0x3a0e05, fogNear: 55, fogFar: 200, hemi: [0xffb08a, 0x2a0805, 1.25], sun: [0xffb070, 2.5], floor: 'lava', wall: 0xff7a2a, below: 'lava' },
   p3: { sky: ['#3a2a18', '#a4834e', '#e6cfa2'], fog: 0xb89a70, fogNear: 70, fogFar: 240, hemi: [0xffe8c4, 0x4a3a28, 1.15], sun: [0xffe2b4, 2.3], floor: 'earth', wall: 0xffc070, below: 'dust' },
+  p4: { sky: ['#0c0a1e', '#2e2456', '#8a78c0'], fog: 0x3a3060, fogNear: 60, fogFar: 230, hemi: [0xd8ccff, 0x2a2440, 1.1], sun: [0xe0d8ff, 2.0], floor: 'wind', wall: 0xb08aff, below: 'clouds' },
 };
 
 const canvasTex = (c, repeat) => {
@@ -260,7 +261,7 @@ const QUALITY = {
   normal: { dpr: 1.5, shadows: false, particles: 1, wall: true, fireLight: false },
   smooth: { dpr: 1, shadows: false, particles: 0.5, wall: false, fireLight: false },
 };
-const BLOB_R = { garuda: 1.7, sister: 1.2, ifrit: 2.0, ifrit_clone: 1.6, titan: 3.2, bomb: 1.0, gaol: 1.3, spiny: 0.6, plume: 0.4, nail: 1.2, shard: 0.4 };
+const BLOB_R = { garuda: 1.7, sister: 1.2, ifrit: 2.0, ifrit_clone: 1.6, titan: 3.2, bomb: 1.0, gaol: 1.3, spiny: 0.6, plume: 0.4, nail: 1.2, shard: 0.4, ultima: 2.8, lahabrea: 0.8, bit: 0.5 };
 const SH = (g) => { g.userData.shared = true; return g; };
 
 class Renderer3D {
@@ -484,12 +485,15 @@ class Renderer3D {
       case 'titan': m = MD.titan(); break;
       case 'bomb': m = MD.bomb(); break;
       case 'gaol': m = MD.gaol(); break;
+      case 'ultima': m = MD.ultima(); break;
+      case 'lahabrea': m = MD.lahabrea(); break;
+      case 'bit': m = MD.bit(); break;
       default: m = MD.shard(); break;
     }
     const info = { m, label: null, badgeKey: '', badge: null, blob: this.blob(BLOB_R[a.look]) };
     info.blob.position.y = 0.02; m.group.add(info.blob);
-    const labelY = { garuda: 6.2, sister: 4.6, ifrit: 6.2, ifrit_clone: 5.2, titan: 9.0, spiny: 2.6, nail: 4.6, shard: 2.4 }[a.look];
-    const bg = { garuda: 'rgba(8,40,28,0.85)', ifrit: 'rgba(60,12,8,0.85)', ifrit_clone: 'rgba(60,12,8,0.8)', nail: 'rgba(60,20,8,0.85)', titan: 'rgba(56,38,16,0.85)' }[a.look];
+    const labelY = { garuda: 6.2, sister: 4.6, ifrit: 6.2, ifrit_clone: 5.2, titan: 9.0, spiny: 2.6, nail: 4.6, shard: 2.4, ultima: 8.6, lahabrea: 4.0, bit: 2.6 }[a.look];
+    const bg = { garuda: 'rgba(8,40,28,0.85)', ifrit: 'rgba(60,12,8,0.85)', ifrit_clone: 'rgba(60,12,8,0.8)', nail: 'rgba(60,20,8,0.85)', titan: 'rgba(56,38,16,0.85)', ultima: 'rgba(36,24,70,0.85)', lahabrea: 'rgba(50,8,8,0.85)' }[a.look];
     if (labelY) { const l = textSprite(a.name, { fg: '#fff', bg: bg || 'rgba(8,12,20,0.75)', size: 36 }); l.position.y = labelY; m.group.add(l); info.label = l; }
     this.scene.add(m.group);
     return info;
@@ -901,7 +905,7 @@ class Renderer3D {
       const who = a.look === 'garuda' ? 'Garuda' : a.look === 'ifrit' ? '伊弗利特' : a.name;
       const cast = sim.activeCasts().find((c) => c.who === who && t <= c.t1);
       const castP = cast ? Math.max(0.01, (t - cast.t0) / Math.max(0.1, cast.t1 - cast.t0)) : 0;
-      const op = a.targetable === false && (a.look === 'garuda' || a.look === 'ifrit' || a.look === 'titan') ? 0.45 : 1;
+      const op = a.targetable === false && (a.look === 'garuda' || a.look === 'ifrit' || a.look === 'titan' || a.look === 'ultima') ? 0.45 : 1;
       if (m.kind === 'garuda') MD.animateGaruda(m, tsec + (a.look === 'sister' ? 1.3 : 0), castP, op);
       else if (m.kind === 'ifrit') {
         MD.animateIfrit(m, tsec, castP, op);
@@ -943,6 +947,12 @@ class Renderer3D {
           info.badgeKey = bk;
         }
       } else if (m.kind === 'shard') { m.float.rotation.y = tsec * 2; m.float.position.y = Math.sin(tsec * 3) * 0.2; }
+      else if (m.kind === 'ultima') MD.animateUltima(m, tsec, castP, op);
+      else if (m.kind === 'lahabrea') { m.float.position.y = 0.6 + Math.sin(tsec * 1.6) * 0.15; m.mats.glow.emissiveIntensity = 1.8 + castP * 2.5; }
+      else if (m.kind === 'bit') {
+        m.float.position.y = 2.0 + Math.sin(tsec * 2.4 + a.pos.x) * 0.25; m.float.rotation.y = tsec * 1.5;
+        m.mats.eye.emissiveIntensity = 1.5 + Math.abs(Math.sin(tsec * 6)) * 2.5 * a.hp;
+      }
       if (a.blue && Math.random() < 0.5) this.sparks.spawn(a.pos.x + (Math.random() - 0.5) * 2, 0.5 + Math.random() * 4, a.pos.z + (Math.random() - 0.5) * 2, 0, 2, 0, 0.6, new T.Color(0x5ab4ff), -1, 0.8);
     }
     for (const [a, info] of this.actorObjs) {

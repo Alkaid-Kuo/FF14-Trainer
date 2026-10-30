@@ -281,3 +281,6 @@ details ul { padding-left: 18px; margin: 6px 0 0; }
 #b-giveup { display: none; grid-column: 1 / -1; padding: 6px 4px; }
 #app.can-giveup #b-giveup { display: block; }
 #overlay li.info::before { content: "•"; color: var(--blue); }
+.seg.grid2 .span2 { grid-column: 1 / -1; }
+.sk.due { animation: skdue 0.8s ease-in-out infinite; }
+@keyframes skdue { 50% { box-shadow: 0 0 0 3px #ffd866, 0 0 18px #ffd866; background: #4a3c14; } }

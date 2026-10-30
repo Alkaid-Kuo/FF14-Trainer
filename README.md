@@ -1,6 +1,6 @@
 # 絕神兵練習器（UWU Trainer）
 
-FF14 絕神兵（P1 迦樓羅、P2 伊弗利特、P3 泰坦）的機制練習器，打法依照萌神神攻略。
+FF14 絕神兵（P1 迦樓羅、P2 伊弗利特、P3 泰坦、P4 究極神兵）的機制練習器，打法依照萌神神攻略。P4 目前做到拉哈布雷亞＋追擊之究極幻想，爆擊／亂擊之究極幻想與 P5 製作中。
 單一 HTML 檔，可以離線單人練習，也可以連線多人一起練。
 
 - 網址：部署好的 `https://ff14-trainer.<帳號>.workers.dev`，單人、多人都用這個。
@@ -11,13 +11,13 @@ FF14 絕神兵（P1 迦樓羅、P2 伊弗利特、P3 泰坦）的機制練習器
 
 | 路徑 | 內容 |
 | --- | --- |
-| `src/` | 原始碼：`core.js` 模擬核心、`skills.js` 技能（GCD、復活、極限技、AI 用技能）、`p1.js`／`p2.js`／`p3.js` 各階段、`render2d.js`／`render3d.js` 畫面、`net.js` 連線同步、`ui.js` 介面 |
+| `src/` | 原始碼：`core.js` 模擬核心、`skills.js` 技能（GCD、復活、極限技、AI 用技能）、`ai.js` 隊友閃避、`p1.js`～`p4.js` 各階段、`render2d.js`／`render3d.js` 畫面、`net.js` 連線同步、`ui.js` 介面 |
 | `vendor/three.min.js` | three.js r160 |
 | `build.py` | 打包成單一 HTML，輸出到 `server/public/index.html` |
 | `server/` | 連線伺服器：Cloudflare Worker＋Durable Object（`worker.js`）；`public/` 是網頁本體 |
 | `wrangler.jsonc` | Cloudflare 部署設定 |
-| `tests/` | 模擬回歸測試（`node tests/test_p3.js 300`；繼續打模式的隨機擊殺壓力測試 `node tests/test_continue.js 100`） |
-| `gen/` | 從攻略圖檔擷取站位用的腳本 |
+| `tests/` | 模擬回歸測試（`node tests/test_p3.js 300`、`test_p4.js`；完整體驗 `test_chain.js`；繼續打模式的隨機擊殺壓力測試 `test_continue.js`） |
+| `gen/` | 從攻略擷取站位用的腳本（P1～P3 用 frames.json，P4／P5 用攻略的 Markdown：`extract_md.py`＋`merge_md.py`） |
 
 ## 建置
 

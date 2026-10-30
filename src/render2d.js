@@ -15,6 +15,7 @@ const THEME = {
   p1: { bg0: '#16324a', bg1: '#070d16', f0: '#7b919c', f1: '#3a4c57', line: 'rgba(30,50,60,0.25)', hi: 'rgba(255,255,255,0.5)' },
   p2: { bg0: '#3a0e05', bg1: '#0a0302', f0: '#4a3a34', f1: '#1e1513', line: 'rgba(0,0,0,0.4)', hi: 'rgba(255,140,80,0.3)' },
   p3: { bg0: '#3a2a16', bg1: '#0c0804', f0: '#8e7a5c', f1: '#4e3e2a', line: 'rgba(40,24,8,0.3)', hi: 'rgba(255,225,170,0.35)' },
+  p4: { bg0: '#1e1838', bg1: '#06040e', f0: '#6e6a8c', f1: '#36324e', line: 'rgba(20,16,40,0.35)', hi: 'rgba(200,180,255,0.35)' },
 };
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
@@ -419,6 +420,37 @@ class Renderer2D {
         face(r, '#2e2010');
         ctx.restore();
         label(a.name, r); break;
+      }
+      case 'ultima': {
+        const r = 2.6 * scale;
+        ctx.save(); ctx.translate(px, pz); ctx.rotate(-ar);
+        ctx.fillStyle = 'rgba(160,120,255,0.45)';
+        for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sx * r * 0.5, -r * 0.3); ctx.lineTo(sx * r * 2.1, -r * 0.9); ctx.lineTo(sx * r * 1.9, -r * 0.2); ctx.lineTo(sx * r * 0.6, r * 0.2); ctx.closePath(); ctx.fill(); }
+        ctx.restore();
+        disc(r, '#9aa4c4', '#3a4058', '#1a1830');
+        const gl = ctx.createRadialGradient(px, pz, 0, px, pz, r * 0.5);
+        gl.addColorStop(0, 'rgba(200,140,255,0.95)'); gl.addColorStop(1, 'rgba(160,100,255,0)');
+        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(px, pz, r * 0.5 * (1 + 0.1 * Math.sin(tsec * 4)), 0, PI * 2); ctx.fill();
+        face(r, '#1a1830');
+        label(a.name, r); break;
+      }
+      case 'lahabrea': {
+        const r = 1.0 * scale;
+        disc(r, '#3a3a48', '#121218', '#000');
+        ctx.fillStyle = '#e8e2d6'; ctx.beginPath(); ctx.arc(px + fx * r * 0.35, pz + fz * r * 0.35, r * 0.4, 0, PI * 2); ctx.fill();
+        face(r, '#9a1a1a');
+        this.hpBar(ctx, px, pz - r * 1.6, r * 2.4, a.hp);
+        label(a.name, r); break;
+      }
+      case 'bit': {
+        const r = 0.75 * scale;
+        ctx.save(); ctx.translate(px, pz); ctx.rotate(-ar);
+        ctx.fillStyle = '#6a7084'; ctx.strokeStyle = '#1e2230'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, r * 1.2); ctx.lineTo(r, -r * 0.7); ctx.lineTo(-r, -r * 0.7); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = `rgba(255,80,60,${0.6 + 0.4 * Math.abs(Math.sin(tsec * 6))})`; ctx.beginPath(); ctx.arc(0, r * 0.3, r * 0.28, 0, PI * 2); ctx.fill();
+        ctx.restore();
+        this.hpBar(ctx, px, pz - r * 1.6, r * 2.2, a.hp);
+        break;
       }
       case 'bomb': {
         const r = 0.95 * scale, k = a.hp;

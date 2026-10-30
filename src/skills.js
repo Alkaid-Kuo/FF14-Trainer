@@ -41,14 +41,22 @@ const MELEE_KIT = ['atk', 'feint', 'arms', 'sprint', 'lb'];
 const LOADOUT = [TANK_KIT, TANK_KIT, HEAL_KIT, HEAL_KIT, MELEE_KIT, MELEE_KIT,
   ['shot', 'troub', 'arms', 'sprint', 'lb'], ['spell', 'raise', 'swift', 'addle', 'sure', 'sprint', 'lb']];
 const RAISERS = [H1, H2, CC];
+/** 極限技的種類（依職位）。 */
+const LB_KIND = ['tank', 'tank', 'healer', 'healer', 'melee', 'melee', 'ranged', 'caster'];
+const LB_NAME = { tank: '坦克', healer: '治療', melee: '近戰', ranged: '遠程', caster: '法系' };
 /** AI 輪流開團隊減傷的順序。 */
 const MIT_ORDER = [[RR, 'troub'], [H1, 'pmit'], [H2, 'pmit'], [CC, 'addle'], [M1, 'feint'], [M2, 'feint'], [MT, 'reprisal'], [OT, 'reprisal']];
 const SELF_MIT = ['mit', 'invuln', 'lbtank'];
 
 // ---------------------------------------------------------------- 檢查（Sim 與連線的 Mirror 都能用）
 const castTime = (slot, id) => (SKILLS[id].raise ? (slot === CC ? RAISE_CAST_C : RAISE_CAST) : (SKILLS[id].cast || 0));
-/** 可以攻擊的 Boss（看得到、可選取）。 */
-function bossOf(sim) { const look = sim.phase.bossLook; return sim.actors.find((a) => a.look === look && !a.dead && a.visible && a.targetable) || null; }
+/** 可以攻擊的目標（看得到、可選取；階段的 bossLook 可以是多種）。from：取離這個位置最近的。 */
+function bossOf(sim, from) {
+  const looks = [].concat(sim.phase.bossLook);
+  const list = sim.actors.filter((a) => looks.includes(a.look) && !a.dead && a.visible && a.targetable);
+  if (!from || list.length < 2) return list[0] || null;
+  return list.sort((a, b) => dist(a.pos, from) - dist(b.pos, from))[0];
+}
 const meleeReach = (sim) => (sim.phase.bossR || 3) + MELEE;
 /** 復活目標：指定的人（倒地、還沒被救、沒人正在救）優先，否則最近的倒地者。 */
 function raiseTarget(sim, c, tg) {
@@ -65,15 +73,11 @@ function skillCheck(sim, slot, id, tg) {
   if (!c.alive) return { why: '倒地中不能使用技能' };
   if (sim.t < c.stunUntil) return { why: c.stunUntil > 900 ? '被關在石牢裡' : '暈眩中' };
   if (c.cast) return { why: '' };
-  if (sk.lb) {
-    if (sim.lb < 1) return { why: '極限技量表不足' };
-    if (ROLES[slot].kind === 'dps' && !bossOf(sim)) return { why: '沒有可以攻擊的目標' };
-    return {};
-  }
+  if (sk.lb) return sim.lb < 1 ? { why: '極限技量表不足' } : {};
   if (sk.gcd) {
     if (sim.t < c.gcdUntil) return { why: '', gcdWait: c.gcdUntil - sim.t };
     if (sk.raise) return raiseTarget(sim, c, tg) ? {} : { why: '沒有可以復活的對象' };
-    const b = bossOf(sim);
+    const b = bossOf(sim, c.pos);
     if (!b) return { why: '沒有可以攻擊的目標' };
     if (sk.melee && dist(b.pos, c.pos) > meleeReach(sim)) return { why: '距離太遠：近戰要站在 Boss 身邊' };
     return {};
@@ -89,6 +93,7 @@ const P = Sim.prototype;
 P.initSkills = function (opts) {
   this.lb = opts.lb || 0;
   this.raids = []; this.aiQ = []; this.aiT = 0; this.wipeT = null; this.softFail = null;
+  this.lbLog = [];   // 極限技使用紀錄：{ t, slot, kind, lv }（P4 拉哈布雷亞要特定種類的 LB3）
   if (opts.carry) opts.carry.forEach((cd, i) => { this.chars[i].cd = Object.assign({}, cd); });
 };
 P.speedMul = function (c) { return this.hasStatus(c.slot, 'sprint') ? 1.3 : 1; };
@@ -155,8 +160,9 @@ P.raiseUp = function (c) {
   c.stats.raisedBy.push({ t, by });
 };
 P.useLB = function (c) {
-  const lv = Math.min(3, Math.floor(this.lb + 1e-6)), kind = ROLES[c.slot].kind, t = this.t;
+  const lv = Math.min(3, Math.floor(this.lb + 1e-6)), kind = LB_KIND[c.slot], t = this.t;
   this.lb -= lv;
+  this.lbLog.push({ t, slot: c.slot, kind, lv });
   c.stats.used.lb = (c.stats.used.lb || 0) + 1;
   this.screenFx.push({ t, type: 'lb', power: 0.4 + lv * 0.2 });
   this.floats.push({ slot: c.slot, t, text: `LB${lv}`, lb: true });
@@ -174,8 +180,9 @@ P.useLB = function (c) {
       }
     }
     for (const o of this.chars) if (o.alive) o.hp = Math.min(100, o.hp + [0, 30, 60, 100][lv]);
-    this.log(`${c.key}：補師極限技 LB${lv}${n ? `（${n} 人復活）` : '（全隊回復）'}`, c.slot);
-  } else this.log(`${c.key}：極限技 LB${lv}（大量傷害）`, c.slot);
+    if (lv >= 3) this.statuses = this.statuses.filter((x) => x.id !== 'doom');   // 治療 LB3 解除死亡宣告
+    this.log(`${c.key}：治療極限技 LB${lv}${n ? `（${n} 人復活）` : '（全隊回復）'}`, c.slot);
+  } else this.log(`${c.key}：${LB_NAME[kind]}極限技 LB${lv}（大量傷害）`, c.slot);
 };
 /** 機制預告（給 AI 用減傷）：kind 'raid'＝大範圍攻擊、'buster'＝死刑；tRes 判定時間。 */
 P.expect = function (kind, tRes) {
@@ -270,6 +277,6 @@ P.skillSummary = function (slot) {
   };
 };
 
-U.SKILLS = SKILLS; U.SKILL_IDS = SKILL_IDS; U.LOADOUT = LOADOUT; U.RAISERS = RAISERS; U.GCD = GCD;
+U.SKILLS = SKILLS; U.SKILL_IDS = SKILL_IDS; U.LOADOUT = LOADOUT; U.RAISERS = RAISERS; U.GCD = GCD; U.LB_KIND = LB_KIND; U.LB_NAME = LB_NAME;
 U.skillCheck = skillCheck; U.bossOf = bossOf; U.meleeReach = meleeReach; U.castTime = castTime; U.raiseTarget = raiseTarget;
 })(typeof window !== 'undefined' ? window : globalThis);

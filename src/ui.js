@@ -4,8 +4,8 @@
 const { Sim, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR, SKILLS, LOADOUT, GCD, skillCheck, bossOf, meleeReach, raiseTarget } = window.UWU;
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;
-const PHASE_ORDER = ['p1', 'p2', 'p3'];  // 已完成的階段（依戰鬥順序）
-const FULL_CHAIN = ['p1', 'p2', 'p3'];   // 完整體驗：連續挑戰的階段
+const PHASE_ORDER = ['p1', 'p2', 'p3', 'p4'];  // 已完成的階段（依戰鬥順序）
+const FULL_CHAIN = ['p1', 'p2', 'p3', 'p4'];   // 完整體驗：連續挑戰的階段
 
 const S = {
   pid: 'p1', mode: 'guide', party: 'multi', role: 0, view: '2d', viewTouched: false, cp: 0, speed: 1,
@@ -226,7 +226,8 @@ function syncSide() {
   const keep = deathMode() === 'continue';
   $('phasenote').textContent = fullMode()
     ? `從 P1 開場一路打到 ${phaseTag(FULL_CHAIN[FULL_CHAIN.length - 1])} 結束，階段之間無縫銜接（跟遊戲一樣沒有倒數）；${keep ? '倒地的人延續到下一階段，等人復活。' : '任何人死亡即失敗（自殺流的計畫倒地除外）。'}`
-    : '「完整體驗」可從 P1 連續挑戰到 P3。';
+    : `「完整體驗」可從 P1 連續挑戰到 ${phaseTag(FULL_CHAIN[FULL_CHAIN.length - 1])}。`;
+  $('charge').style.display = PH().maxCharges ? '' : 'none';   // P4 沒有覺醒充能
   setSeg('seg-death', deathMode());
   $('deathnote').textContent = keep
     ? '倒地的人可以被補師／C 復活（AI 補師也會救人），真人玩家全部倒地或按「放棄」才結束；沒覺醒也打到最後（結算標 ✗）。'
@@ -833,7 +834,7 @@ function deadHtml(sim, c) {
 /** 技能列：冷卻、GCD、不能用（倒地、距離太遠、沒有目標）、排隊中；自己的讀條；極限技量表。 */
 function updateHotbar(sim) {
   const pc = sim.pc, t = sim.t, run = S.phase === 'running' && t >= 0;
-  const b = bossOf(sim), far = !b || Math.hypot(b.pos.x - pc.pos.x, b.pos.z - pc.pos.z) > meleeReach(sim);
+  const b = bossOf(sim, pc.pos), far = !b || Math.hypot(b.pos.x - pc.pos.x, b.pos.z - pc.pos.z) > meleeReach(sim);
   const blocked = !pc.alive || t < pc.stunUntil;
   for (const sl of hot.slots) {
     const sk = SKILLS[sl.id];
@@ -842,11 +843,12 @@ function updateHotbar(sim) {
     else if (!sk.lb && pc.cd[sl.id] !== undefined) { const rem = pc.cd[sl.id] - t; if (rem > 0) { p = rem / sk.cd; txt = String(Math.ceil(rem)); } }
     const off = !!(!run || blocked || (sk.lb && sim.lb < 1) || (sk.melee && far) || (sk.gcd && !sk.raise && !b) || (sk.raise && !raiseTarget(sim, pc, S.target)));
     const q = !!(pc.queued && pc.queued.id === sl.id);
-    const key = `${p.toFixed(2)}|${txt}|${off}|${q}`;
+    const due = !!(sk.lb && run && sim.phase.lbDue && sim.phase.lbDue(sim, pc.slot));   // 輪到你用極限技（P4 拉哈布雷亞）
+    const key = `${p.toFixed(2)}|${txt}|${off}|${q}|${due}`;
     if (key === sl.key) continue;
     sl.key = key;
     sl.cd.style.setProperty('--p', p.toFixed(3)); sl.ct.textContent = txt;
-    sl.el.classList.toggle('off', off); sl.el.classList.toggle('q', q);
+    sl.el.classList.toggle('off', off); sl.el.classList.toggle('q', q); sl.el.classList.toggle('due', due);
   }
   const k = pc.cast, ck = k ? `${k.id}|${k.tg}|${Math.min(1, (t - k.t0) / (k.t1 - k.t0)).toFixed(3)}` : '';
   if (ck !== hot.castKey) {

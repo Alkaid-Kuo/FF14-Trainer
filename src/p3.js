@@ -9,7 +9,7 @@
 (function (root) {
 'use strict';
 const U = root.UWU;
-const { PHASES, ROLES, inCircle, inRect, inCone, bearingOf, mulberry32, shuffler, rotateXZ, norm360, rotFromBearing } = U;
+const { PHASES, ROLES, inCircle, inRect, bearingOf, mulberry32, shuffler, rotateXZ, norm360, rotFromBearing } = U;
 const { MT, OT, H1, H2, M1, M2, RR, CC } = U;
 const PI = Math.PI;
 const FR = U.FRAMES;
@@ -95,74 +95,17 @@ function setup(S) {
   s.anim = [];                        // 泰坦跳躍高度動畫：{ t0, t1, from, to }
 }
 
-// ---------------------------------------------------------------- 隊友 AI：找最近的安全點
-/** 判斷某點是否危險：之後 H 秒內會判定的預警範圍、污泥、（即將縮小的）場地邊緣。 */
-const pendingFx = (S, c) => S.fx.filter((f) => f.t1 > S.t && f.t1 <= S.t + K.HORIZON && !(f.npcIgnore && f.npcIgnore.includes(c.slot)) && !f.harmless);
-function inFx(p, f, margin) {
-  if (f.kind === 'circle') return Math.hypot(p.x - f.x, p.z - f.z) <= f.r + margin;
-  if (f.kind === 'rect') return inRect(p, f, f.rot, f.w / 2 + margin, f.len + margin);
-  if (f.kind === 'cone') return inCone(p, f, f.rot, f.half + 0.12, f.len + margin);
-  return false;
-}
-function badFn(S, c, margin) {
-  const now = S.t, s = S.s;
-  const list = pendingFx(S, c);
-  const sl = s.sludge.filter((z) => z.t1 > now && z.t0 <= now + K.HORIZON);
-  const er = Math.min(S.edgeR, s.nextEdgeR) - 1.0;
-  return (p) => {
-    if (Math.hypot(p.x, p.z) > er) return true;
-    for (const f of list) if (inFx(p, f, margin)) return true;
-    for (const z of sl) if (Math.hypot(p.x - z.x, p.z - z.z) <= z.r + margin) return true;
-    return false;
-  };
-}
-function nearestSafe(base, bad) {
-  if (!bad(base)) return base;
-  for (let d = 0.4; d <= 16; d += 0.4) {
-    const n = Math.max(16, Math.round(d * 10));
-    for (let i = 0; i < n; i++) {
-      const a = i / n * PI * 2, p = { x: base.x + Math.cos(a) * d, z: base.z + Math.sin(a) * d };
-      if (!bad(p)) return p;
-    }
-  }
-  return base;
-}
-/** 在走得到的範圍（reach）內找安全、又最接近 target 的點。 */
-function bestReachable(cur, target, reach, bad) {
-  let best = null, bd = 1e9;
-  for (let d = 0; d <= reach; d += 0.6) {
-    const n = d === 0 ? 1 : Math.max(12, Math.round(d * 5));
-    for (let i = 0; i < n; i++) {
-      const a = i / n * PI * 2, p = { x: cur.x + Math.cos(a) * d, z: cur.z + Math.sin(a) * d };
-      if (bad(p)) continue;
-      const e = Math.hypot(p.x - target.x, p.z - target.z);
-      if (e < bd) { bd = e; best = p; }
-    }
-  }
-  return best || nearestSafe(cur, bad);
-}
-/** 把攻略站位修正成「現在這一刻」的安全點（隨機的地裂方向、圓圈位置都會變）；
-    判定前走不到的話，改去走得到、又最接近目標的安全點。 */
-function sanitize(S, spots) {
-  const now = S.t, v = U.C.NPC_SPEED;
-  return spots.map((sp, slot) => {
-    if (!sp) return sp;
-    const c = S.chars[slot];
-    if (!c.alive || now < c.stunUntil) return sp;
-    const bad = badFn(S, c, K.MARGIN);
-    let p = nearestSafe(xz(sp), bad);
-    // 直線走過去的途中，會不會剛好在某個判定的瞬間站在範圍裡？會的話改去「那之前走得到」的安全點
-    const d = Math.hypot(p.x - c.pos.x, p.z - c.pos.z);
-    let tHit = Infinity;
-    for (const f of pendingFx(S, c)) {
-      const k = d < 1e-6 ? 1 : Math.min(1, Math.max(0, v * (f.t1 - now - 0.4)) / d);
-      const q = { x: c.pos.x + (p.x - c.pos.x) * k, z: c.pos.z + (p.z - c.pos.z) * k };
-      if (inFx(q, f, 0.3)) tHit = Math.min(tHit, f.t1 - now);
-    }
-    if (tHit !== Infinity) p = bestReachable(c.pos, p, Math.max(0, v * (tHit - 0.5)), bad);
-    return [p.x, p.z];
-  });
-}
+// ---------------------------------------------------------------- 隊友 AI：找最近的安全點（共用 ai.js）
+/** 危險：之後 HORIZON 秒內會判定的預警範圍、污泥、（即將縮小的）場地邊緣。 */
+const AI = U.AI.make({
+  horizon: K.HORIZON, margin: K.MARGIN,
+  edge: (S) => Math.min(S.edgeR, S.s.nextEdgeR) - 1.0,
+  extra: (S) => {
+    const now = S.t, sl = S.s.sludge.filter((z) => z.t1 > now && z.t0 <= now + K.HORIZON);
+    return (p) => sl.some((z) => Math.hypot(p.x - z.x, p.z - z.z) <= z.r + K.MARGIN);
+  },
+});
+const sanitize = AI.sanitize;
 
 function build(S) {
   const R = S.roll, s = S.s, at = (t, fn) => S.at(t, fn);
@@ -703,6 +646,6 @@ PHASES.p3 = {
     `地裂目標：${r.lsTargets.filter(Boolean).join('、') || '—'}`,
   ],
 };
-root.UWU_P3 = { K, sanitize, nearestSafe, badFn };
+root.UWU_P3 = { K, sanitize };
 
 })(typeof window !== 'undefined' ? window : globalThis);

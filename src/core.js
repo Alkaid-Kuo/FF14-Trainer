@@ -24,6 +24,9 @@ const STATUS_DEF = {
   stun: { name: '暈眩', icon: '暈', color: '#e0c050' },
   transcendent: { name: '復活無敵', icon: '無', color: '#f5e27a' },
   weak: { name: '衰弱（復活後）', icon: '衰', color: '#9aa3b5' },
+  doom: { name: '死亡宣告（治療 LB3 才能解除）', icon: '死', color: '#9b4dff' },
+  down: { name: '擊倒（無法行動）', icon: '倒', color: '#c0a060' },
+  sticky: { name: '吸附式炸彈（倒數結束爆炸）', icon: '彈', color: '#ff5a5a' },
   // 技能
   swift: { name: '即刻詠唱', icon: '即', color: '#c58cff' },
   sprint: { name: '衝刺', icon: '衝', color: '#6fd3ff' },
@@ -591,5 +594,5 @@ root.UWU = {
   atBearing, bearingOf, norm360, ipos, irot, rotFromBearing, rotateXZ, mulberry32, hash01, shuffler, angDiff,
   MT, OT, H1, H2, M1, M2, RR, CC, ENMITY, NON_TANKS,
 };
-if (typeof module !== 'undefined' && module.exports) { require('./skills.js'); module.exports = root.UWU; }
+if (typeof module !== 'undefined' && module.exports) { require('./skills.js'); require('./ai.js'); module.exports = root.UWU; }
 })(typeof window !== 'undefined' ? window : globalThis);

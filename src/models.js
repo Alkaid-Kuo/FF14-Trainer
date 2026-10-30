@@ -587,5 +587,93 @@ function gaol() {
   return { group, mats, kind: 'gaol' };
 }
 
-root.UWU_MODELS = { character, animateCharacter, setCharacterDead, garuda, animateGaruda, ifrit, animateIfrit, titan, animateTitan, bomb, gaol, spiny, plume, nail, shard };
+// ------------------------------------------------------------------ P4
+/** 究極神兵：深灰藍的機械巨人，胸口與背翼有紫色發光核心。 */
+function ultima() {
+  const M = (c, o) => std(c, Object.assign({ roughness: 0.35, metalness: 0.75 }, o || {}));
+  const mats = { armor: M(0x4a5468), dark: M(0x262b38), trim: M(0x8a7ab8, { metalness: 0.85, roughness: 0.25 }), core: glowMat(0xb46cff, 2.6), eye: glowMat(0x7af0ff, 3.2), wing: glowMat(0x9a6cff, 1.2, { transparent: true, opacity: 0.55, side: T.DoubleSide }) };
+  const group = new T.Group(), body = new T.Group(); group.add(body);
+  const legs = [];
+  for (const sx of [-1, 1]) {
+    const leg = pivot(sx * 1.0, 3.0, 0);
+    leg.add(mesh(limb('uThigh', 0.55, 0.45, 1.6, 8), mats.dark));
+    const shin = pivot(0, -1.6, 0.1);
+    shin.add(mesh(limb('uShin', 0.5, 0.35, 1.3, 8), mats.armor));
+    const foot = mesh(geo('uFoot', () => new T.BoxGeometry(0.9, 0.35, 1.5)), mats.dark, 0, -1.35, 0.25); shin.add(foot);
+    leg.add(shin); body.add(leg); legs.push(leg);
+  }
+  body.add(mesh(geo('uPelvis', () => new T.BoxGeometry(2.3, 0.8, 1.3)), mats.dark, 0, 3.2, 0));
+  const torso = mesh(geo('uTorso', () => { const g = new T.CylinderGeometry(1.55, 1.0, 2.4, 6); g.translate(0, 1.2, 0); return g; }), mats.armor, 0, 3.5, 0); body.add(torso);
+  body.add(mesh(geo('uChest', () => new T.BoxGeometry(2.0, 1.2, 0.5)), mats.trim, 0, 5.0, 0.95));
+  const core = mesh(ball('uCore', 0.38, 16, 12), mats.core, 0, 4.7, 1.2); body.add(core);
+  // 肩甲、手臂（前臂是砲管）
+  const arms = [];
+  for (const sx of [-1, 1]) {
+    const sh = mesh(geo('uShoulder', () => new T.BoxGeometry(1.2, 0.9, 1.4)), mats.trim, sx * 2.0, 5.6, 0); sh.rotation.z = sx * -0.25; body.add(sh);
+    const arm = pivot(sx * 2.05, 5.3, 0);
+    arm.add(mesh(limb('uUpper', 0.42, 0.36, 1.5, 8), mats.dark));
+    const fore = pivot(0, -1.5, 0);
+    fore.add(mesh(limb('uFore', 0.45, 0.5, 1.6, 8), mats.armor));
+    fore.add(mesh(ball('uMuzzle', 0.2, 10, 8), mats.core, 0, -1.65, 0));
+    arm.add(fore); arm.rotation.z = sx * 0.2;
+    body.add(arm); arms.push({ arm, fore, sx });
+  }
+  // 頭：窄長、發光的眼縫、後掠角
+  const head = pivot(0, 6.25, 0.2);
+  head.add(mesh(geo('uHead', () => new T.BoxGeometry(0.75, 0.8, 0.9)), mats.armor));
+  const visor = mesh(geo('uVisor', () => new T.BoxGeometry(0.62, 0.12, 0.1)), mats.eye, 0, 0.05, 0.47); head.add(visor);
+  for (const sx of [-1, 1]) head.add(mesh(taper('uHorn' + sx, [[sx * 0.35, 0.3, 0], [sx * 0.65, 0.75, -0.4], [sx * 0.75, 1.1, -0.95]], 0.12, 0.02, 12, 6), mats.trim));
+  body.add(head);
+  // 背後的光翼（4 片）
+  const wings = [];
+  for (const sx of [-1, 1]) for (const k of [0, 1]) {
+    const w = pivot(sx * 0.7, 5.4 - k * 0.9, -0.8);
+    const blade = mesh(geo('uWing', () => { const g = new T.PlaneGeometry(4.2, 0.9); g.translate(2.1, 0, 0); return g; }), mats.wing);
+    blade.castShadow = false;
+    w.add(blade); w.rotation.set(0, sx > 0 ? -0.35 : PI + 0.35, sx * (0.55 - k * 0.45));
+    body.add(w); wings.push({ w, sx, k });
+  }
+  return { group, body, legs, arms, head, wings, core, mats, kind: 'ultima' };
+}
+function animateUltima(m, t, castP, opacity) {
+  const casting = castP > 0, raise = casting ? Math.min(1, castP * 2.5) : 0;
+  m.body.position.y = Math.sin(t * 1.2) * 0.08;
+  for (const { arm, fore, sx } of m.arms) { arm.rotation.x = -raise * 1.8 + Math.sin(t * 0.9 + sx) * 0.04; arm.rotation.z = sx * (0.2 + raise * 0.4); fore.rotation.x = -raise * 0.6; }
+  for (const { w, sx, k } of m.wings) w.rotation.z = sx * (0.55 - k * 0.45) + Math.sin(t * 1.4 + k) * 0.06 * sx + raise * 0.25 * sx;
+  m.mats.core.emissiveIntensity = 2.2 + Math.sin(t * 3) * 0.6 + raise * 2;
+  m.mats.wing.opacity = (0.4 + 0.2 * Math.sin(t * 2)) * opacity;
+  for (const k of Object.keys(m.mats)) { if (k === 'wing') continue; m.mats[k].transparent = opacity < 1; m.mats[k].opacity = opacity; }
+}
+/** 拉哈布雷亞：黑色長袍、白色面具、紅色紋飾，飄在空中。 */
+function lahabrea() {
+  const mats = { robe: std(0x1a1a22, { roughness: 0.8 }), red: std(0x9a1a1a, { roughness: 0.5 }), mask: std(0xe8e2d6, { roughness: 0.35 }), glow: glowMat(0xff3a3a, 2.4) };
+  const group = new T.Group(), float = new T.Group(); group.add(float);
+  float.add(mesh(geo('lRobe', () => { const g = new T.ConeGeometry(0.75, 2.0, 12, 1, true); g.translate(0, 1.0, 0); return g; }), mats.robe, 0, 0.35, 0));
+  float.add(mesh(geo('lChest', () => new T.CylinderGeometry(0.42, 0.5, 0.8, 10)), mats.robe, 0, 2.2, 0));
+  float.add(mesh(geo('lSash', () => new T.BoxGeometry(0.16, 1.6, 0.06)), mats.red, 0, 1.6, 0.45));
+  for (const sx of [-1, 1]) {
+    const sp = mesh(geo('lPad', () => new T.ConeGeometry(0.22, 0.6, 6)), mats.red, sx * 0.55, 2.55, 0); sp.rotation.z = -sx * 1.1; float.add(sp);
+    const arm = mesh(limb('lArm', 0.13, 0.16, 0.9, 8), mats.robe, sx * 0.48, 2.45, 0); arm.rotation.z = sx * 0.4; float.add(arm);
+  }
+  const head = pivot(0, 2.85, 0);
+  head.add(mesh(ball('lHood', 0.3, 12, 10), mats.robe));
+  const mask = mesh(geo('lMask', () => new T.SphereGeometry(0.24, 12, 10, 0, PI, 0, PI)), mats.mask, 0, 0, 0.12); head.add(mask);
+  for (const sx of [-1, 1]) head.add(mesh(ball('lEye', 0.04, 6, 4), mats.glow, sx * 0.09, 0.03, 0.34));
+  float.add(head);
+  return { group, float, mats, kind: 'lahabrea' };
+}
+/** 魔導浮游炮：浮空的三角錐砲台，紅色感應眼。 */
+function bit() {
+  const mats = { body: std(0x5a6070, { metalness: 0.7, roughness: 0.3 }), fin: std(0x343a48, { metalness: 0.7, roughness: 0.35 }), eye: glowMat(0xff4a3a, 2.4) };
+  const group = new T.Group(), float = new T.Group(); group.add(float);
+  const core = mesh(geo('bCore', () => new T.OctahedronGeometry(0.55, 0)), mats.body, 0, 0, 0); core.scale.set(1, 1.3, 1); float.add(core);
+  for (let i = 0; i < 3; i++) {
+    const fin = mesh(geo('bFin', () => new T.BoxGeometry(0.08, 0.5, 0.9)), mats.fin, Math.cos(i * 2.094) * 0.55, 0, Math.sin(i * 2.094) * 0.55);
+    fin.rotation.y = -i * 2.094; float.add(fin);
+  }
+  float.add(mesh(ball('bEye', 0.16, 10, 8), mats.eye, 0, 0.05, 0.5));
+  return { group, float, mats, kind: 'bit' };
+}
+
+root.UWU_MODELS = { character, animateCharacter, setCharacterDead, garuda, animateGaruda, ifrit, animateIfrit, titan, animateTitan, bomb, gaol, spiny, plume, nail, shard, ultima, animateUltima, lahabrea, bit };
 })(window);

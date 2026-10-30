@@ -1,8 +1,8 @@
 // 繼續打模式壓力測試：隨機時間把隨機的人打死，確認機制遇到倒地者不會壞掉、AI 會救人、打得到最後。
 // 用法：node tests/test_continue.js [每種的局數] [階段，例如 p1,p2,p3,p3s]
-const U = require('../src/core.js'); require('../src/frames.js'); require('../src/p1.js'); require('../src/p2.js'); require('../src/p3.js');
+const U = require('../src/core.js'); require('../src/frames.js'); require('../src/p1.js'); require('../src/p2.js'); require('../src/p3.js'); require('../src/p4.js');
 const N = parseInt(process.argv[2] || '40');
-const kinds = (process.argv[3] || 'p1,p2,p3,p3s').split(',');
+const kinds = (process.argv[3] || 'p1,p2,p3,p3s,p4').split(',');
 let bad = 0;
 for (const kind of kinds) {
   const ph = kind === 'p3s' ? 'p3' : kind, variant = kind === 'p3s' ? 'suicide' : kind === 'p3' ? 'regular' : null;
