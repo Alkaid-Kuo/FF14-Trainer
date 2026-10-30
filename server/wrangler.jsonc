@@ -1,0 +1,12 @@
+{
+  // 絕神兵練習器：網頁＋連線伺服器（部署：npx wrangler deploy）
+  "name": "ff14-trainer",
+  "main": "worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  // 免費方案要用 SQLite 型的 Durable Object
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
+}
