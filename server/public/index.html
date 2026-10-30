@@ -248,6 +248,46 @@ details ul { padding-left: 18px; margin: 6px 0 0; }
 .camset label input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent2); }
 .camset output { color: #fff; font-variant-numeric: tabular-nums; }
 .camset .btn { margin-top: 10px; }
+/* 技能列（下方中央） */
+#hotbar { position: absolute; bottom: 12px; left: max(50%, 486px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 5px; }
+#slots { display: flex; gap: 4px; pointer-events: auto; }
+.sk { position: relative; width: 46px; height: 46px; border-radius: 9px; background: linear-gradient(#24344d, #172235); border: 1px solid #3b4d6b; color: #e6edf6;
+  padding: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12.5px; box-shadow: 0 3px 10px rgba(0,0,0,.45); }
+.sk:hover { border-color: #6a85b3; }
+.sk .kb { position: absolute; left: 3px; top: 1px; font-size: 10px; color: #9fb0c8; font-weight: 600; }
+.sk .cd { position: absolute; inset: 0; background: conic-gradient(rgba(4,7,12,.74) calc(var(--p, 0) * 360deg), transparent 0); pointer-events: none; }
+.sk .ct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px #000; pointer-events: none; }
+.sk .ct:empty { display: none; }
+.sk.gcd { border-color: #5f7aa6; }
+.sk.lbk { color: #ffd866; }
+.sk.off { opacity: .42; }
+.sk.q { box-shadow: inset 0 0 0 2px var(--accent2); }
+.sk.fl { animation: skfl .3s ease-out; }
+@keyframes skfl { from { background: #ffe58a; color: #0a0f17; } }
+#mycast { width: 230px; background: rgba(12,18,28,.88); border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px 5px; visibility: hidden; }
+#mycast.show { visibility: visible; }
+#mycast span { font-size: 12px; color: #cfe3ff; font-weight: 600; }
+#mycast .bar { height: 6px; background: #223048; border-radius: 4px; overflow: hidden; margin-top: 2px; }
+#mycast .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4f95ff, #a6e3ff); }
+#mycast.raise .bar i { background: linear-gradient(90deg, #ffb84d, #ffe680); }
+#lbbar { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #ffd866; text-shadow: 0 1px 3px #000; }
+#lbbar i { width: 54px; height: 8px; background: #1a2436; border: 1px solid #3b4d6b; border-radius: 4px; overflow: hidden; display: block; }
+#lbbar i s { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3d8bff, #7fd0ff); }
+#lbbar i.full s { background: linear-gradient(90deg, #ffb84d, #ffe680); box-shadow: 0 0 8px #ffd866; }
+#keys { bottom: 100px; }
+/* 隊伍列表：點選當復活目標、讀條 */
+#party .pm { pointer-events: auto; cursor: pointer; position: relative; border-radius: 6px; padding: 0 2px; }
+#party .pm:hover { background: rgba(90,168,255,.08); }
+#party .pm.tg { box-shadow: 0 0 0 2px var(--accent2); background: rgba(255,216,102,.08); }
+.pm .cb { position: absolute; left: 39px; bottom: 0; width: 58px; height: 3px; border-radius: 2px; background: #223048; overflow: hidden; display: none; }
+.pm .cb.on { display: block; }
+.pm .cb i { display: block; height: 100%; width: 0; background: #7fc4ff; }
+.pm .cb.raise i { background: #ffd866; }
+.pm .rz { color: var(--accent2); font-weight: 700; }
+/* 放棄（繼續打模式進行中才顯示） */
+#b-giveup { display: none; grid-column: 1 / -1; padding: 6px 4px; }
+#app.can-giveup #b-giveup { display: block; }
+#overlay li.info::before { content: "•"; color: var(--blue); }
 
 </style>
 </head>
@@ -287,6 +327,12 @@ details ul { padding-left: 18px; margin: 6px 0 0; }
       </div>
       <div id="keys"></div>
       <div id="banner"></div>
+      <!-- 下方中央：技能列（1～8）、自己的讀條、極限技量表 -->
+      <div id="hotbar">
+        <div id="mycast"><span id="mycast-nm"></span><div class="bar"><i id="mycast-bar"></i></div></div>
+        <div id="lbbar" title="極限技量表（全隊共用，每 50 秒一格）"><b>LB</b><i><s></s></i><i><s></s></i><i><s></s></i></div>
+        <div id="slots"></div>
+      </div>
       <button class="btn primary" id="raise">接受復活（F）<small id="raise-hint"></small></button>
       <div id="toast"></div>
       <div id="overlay"><div class="card" id="card"></div></div>
@@ -303,6 +349,7 @@ details ul { padding-left: 18px; margin: 6px 0 0; }
         <button class="btn" id="b-restart" title="同一組隨機重來（R）">重來</button>
         <button class="btn" id="b-new" title="換一組隨機（N）">新隨機</button>
         <button class="btn" id="b-demo" title="AI 代打（P）">AI 代打</button>
+        <button class="btn warn" id="b-giveup" title="放棄這一局，看結算（G）">放棄</button>
       </div>
     </header>
     <div class="side-body">
@@ -345,6 +392,11 @@ details ul { padding-left: 18px; margin: 6px 0 0; }
         <p class="note" id="partynote"></p>
       </section>
 
+      <section><h3>有人倒地時</h3>
+        <div class="seg" id="seg-death"><button data-v="stop" class="on">立即重來</button><button data-v="continue">繼續打（可復活）</button></div>
+        <p class="note" id="deathnote"></p>
+      </section>
+
       <section><h3>視角</h3>
         <div class="seg" id="seg-view"><button data-v="2d" class="on">2D</button><button data-v="3d">3D</button><button data-v="both">3D＋小地圖</button></div>
       </section>
@@ -378,14 +430,17 @@ details ul { padding-left: 18px; margin: 6px 0 0; }
       <details class="info"><summary>操作與規則</summary>
         <ul>
           <li><kbd>W A S D</kbd> / 方向鍵移動（3D 為相機方向，2D 為地圖方向）。</li>
-          <li><kbd>Space</kbd> 開始／暫停，<kbd>R</kbd> 重來，<kbd>N</kbd> 換隨機，<kbd>V</kbd> 切換視角，<kbd>P</kbd> AI 代打，<kbd>H</kbd> 側邊欄。</li>
+          <li><kbd>Space</kbd> 開始／暫停，<kbd>R</kbd> 重來，<kbd>N</kbd> 換隨機，<kbd>V</kbd> 切換視角，<kbd>P</kbd> AI 代打，<kbd>H</kbd> 側邊欄，<kbd>G</kbd> 放棄（繼續打模式）。</li>
+          <li>技能：<kbd>1</kbd>～<kbd>7</kbd> 或點畫面下方的技能列（按住可連續施放 GCD）。補師／C 的讀條技能在讀條中移動會中斷（最後 0.5 秒可以滑步）；近戰的攻擊要站在 Boss 身邊。復活的目標：點左邊的隊伍列表選人，沒選就救最近的倒地者。</li>
+          <li>技能效果：衝刺會加速、防擊退會擋掉擊退（大怒震用了也不會暈眩）；減傷、無敵、團隊減傷只檢查使用時機（結算會列出死刑與大範圍攻擊有沒有覆蓋）。極限技量表全隊共用，每 50 秒一格。</li>
           <li>3D：拖曳滑鼠旋轉鏡頭，滾輪縮放；鏡頭的距離／視野角／俯視上限在「設定」裡調整。</li>
           <li>場地標點：左下角選標點再點地圖放置，<kbd>Esc</kbd> 取消。</li>
-          <li>P3 自殺流：倒地後收到復活時，按 <kbd>F</kbd> 或畫面上的按鈕接受復活。</li>
+          <li>倒地後收到復活時，按 <kbd>F</kbd> 或畫面上的按鈕接受復活（起身後 5 秒無敵）。</li>
+          <li>有人倒地時：「立即重來」任何人死亡就失敗；「繼續打」倒地的人可以被補師／C 復活（AI 補師也會救人），真人玩家全部倒地或按「放棄」才結束。沒覺醒也會打到最後，結算標 ✗。單人預設立即重來，連線預設繼續打。</li>
           <li>音效要先點一下畫面或按任意鍵才會啟用（瀏覽器限制）；音量與靜音在「設定」裡調整。</li>
           <li>「完整體驗」從 P1 開場一路打到 P3 結束（階段之間無縫銜接）；分階段練習與檢查點仍然可用。</li>
-          <li>只做移動，不含技能；柔羽、火獄之楔的擊殺由時間軸自動處理。</li>
-          <li>任何人死亡即判定失敗（傷害不致死，只有機制會致死）。碰到場地邊緣會墜落死亡。</li>
+          <li>柔羽、火獄之楔、石牢的擊殺由時間軸自動處理（不依輸出）。</li>
+          <li>傷害不致死，只有機制會致死。碰到場地邊緣會墜落死亡。</li>
           <li>左上角會顯示你的狀態，隊伍列表顯示隊友狀態（低氣壓層數、熱風、火獄之鎖、詛咒之炎、點名）與剩餘秒數。</li>
         </ul>
       </details>
@@ -441,7 +496,22 @@ const STATUS_DEF = {
   gaol: { name: '花崗石牢（拘束・無敵）', icon: '牢', color: '#a07850' },
   stun: { name: '暈眩', icon: '暈', color: '#e0c050' },
   transcendent: { name: '復活無敵', icon: '無', color: '#f5e27a' },
+  weak: { name: '衰弱（復活後）', icon: '衰', color: '#9aa3b5' },
+  // 技能
+  swift: { name: '即刻詠唱', icon: '即', color: '#c58cff' },
+  sprint: { name: '衝刺', icon: '衝', color: '#6fd3ff' },
+  antikb: { name: '防擊退', icon: '穩', color: '#e8e8e8' },
+  mit: { name: '減傷', icon: '盾', color: '#6fa8ff' },
+  invuln: { name: '無敵', icon: '敵', color: '#ffe066' },
+  reprisal: { name: '雪仇（團隊減傷）', icon: '雪', color: '#ff8a6b' },
+  pmit: { name: '群體減傷（補師）', icon: '團', color: '#7be08a' },
+  troub: { name: '團隊減傷（遠程）', icon: '團', color: '#ff8fbf' },
+  feint: { name: '牽制（團隊減傷）', icon: '牽', color: '#ff9a6b' },
+  addle: { name: '昏亂（團隊減傷）', icon: '昏', color: '#b98cff' },
+  lbtank: { name: '坦克極限技（全隊減傷）', icon: '極', color: '#ffd24a' },
 };
+/** 團隊減傷類狀態（大範圍攻擊時有沒有覆蓋）。 */
+const PARTY_MIT = ['reprisal', 'pmit', 'troub', 'feint', 'addle', 'lbtank'];
 
 const ROLES = [
   { slot: 0, key: 'MT', name: '主坦 MT', kind: 'tank', color: '#4f8dff' },
@@ -454,6 +524,9 @@ const ROLES = [
   { slot: 7, key: 'C', name: '法系 C', kind: 'dps', color: '#b27bff' },
 ];
 const MT = 0, OT = 1, H1 = 2, H2 = 3, M1 = 4, M2 = 5, RR = 6, CC = 7;
+/** 仇恨順序：坦克倒地時 Boss 改打下一個活著的人。 */
+const ENMITY = [MT, OT, M1, M2, RR, CC, H1, H2];
+const NON_TANKS = [H1, H2, M1, M2, RR, CC];
 
 /** 場地標點（攻略標準：A/B/C/D 在正點、1 號位在中心）。顏色照 FF14：A/1 紅、B/2 黃、C/3 藍、D/4 紫。 */
 const WM_COLOR = { A: '#ff4d4d', B: '#ffd23f', C: '#4da6ff', D: '#c46bff', 1: '#ff4d4d', 2: '#ffd23f', 3: '#4da6ff', 4: '#c46bff' };
@@ -545,17 +618,20 @@ class Actor {
 const PHASES = {};
 
 class Sim {
-  /** opts: { phase, seed, playerSlot, autoPlayer, stopOnDeath, startPos?, preRoll?, variant?, remote? }
+  /** opts: { phase, seed, playerSlot, autoPlayer, stopOnDeath, onDeath?, startPos?, preRoll?, variant?, remote?, dead?, lb?, carry? }
       startPos / preRoll：完整體驗模式接續上一階段時，沿用上一階段結束時的位置，preRoll 0＝無倒數直接開始。
       variant：打法（例如 P3 的 'regular' / 'suicide'）。
-      remote：連線時其他真人玩家的職位（位置由網路傳來，不由 AI 控制）。 */
+      remote：連線時其他真人玩家的職位（位置由網路傳來，不由 AI 控制）。
+      onDeath：'stop'（預設，有人死亡就失敗）或 'continue'（繼續打：倒地可以復活，真人全倒地才結束）。
+      dead / lb / carry：完整體驗接續上一階段的倒地者、極限技量表、技能冷卻。 */
   constructor(opts) {
     this.phase = PHASES[opts.phase || 'p1'];
     this.seed = opts.seed >>> 0;
     this.variant = opts.variant || null;
     this.playerSlot = opts.playerSlot;
     this.humans = new Set([this.playerSlot].concat(opts.remote || []));   // 真人控制的職位（受傷紀錄、結算都算他們）
-    this.stopOnDeath = opts.stopOnDeath !== false;
+    this.keepGoing = opts.onDeath === 'continue';
+    this.stopOnDeath = !this.keepGoing && opts.stopOnDeath !== false;
     this.t = opts.preRoll === undefined ? this.phase.preRoll : opts.preRoll;   // 倒數秒數（負值）
     this.t0 = this.t;
     this.status = 'running';          // running | failed | cleared
@@ -573,6 +649,8 @@ class Sim {
     this.edgeMsg = '碰到場地邊緣：墜落死亡';
     this.avoid = [];                   // 隊友 AI 走路時會繞開的圓（污泥等）：{ x, z, r, t0, t1 }
     this.input = { x: 0, z: 0 };
+    this.lastMove = null;              // 最近一次的走位（倒地者起身、坦克接手時用）
+    this.tankSwap = null;              // 倒地過的坦克：另一位坦克接手拉怪，直到下一次走位時他已起身
     this.guides = ROLES.map(() => ({ cur: null, next: null }));   // 每個職位各自的教學指引（連線時每人看自己的）
     this.s = {};                       // 階段自訂狀態
     this.roll = this.phase.roll(this.seed);
@@ -581,13 +659,15 @@ class Sim {
     this.chars = ROLES.map((r) => ({
       slot: r.slot, key: r.key, kind: r.kind,
       pos: { x: start[r.slot][0], z: start[r.slot][1] }, prev: { x: start[r.slot][0], z: start[r.slot][1] }, rot: PI, prevRot: PI,
-      goal: null, goalAt: 0, auto: r.slot !== this.playerSlot || !!opts.autoPlayer,
+      goal: null, goalAt: 0, auto: r.slot === this.playerSlot ? !!opts.autoPlayer : !(opts.remote || []).includes(r.slot),   // 連線的隊員不是 AI
       alive: true, hp: 100, thermal: 0, searing: false, dwell: 0, deathCause: null,
-      kb: null, kbSeq: 0, fell: false, walk: 0, stunUntil: 0, invulnUntil: 0, planned: false, raise: null,
-      remote: (opts.remote || []).includes(r.slot), net: null,
-      stats: { damage: 0 },
+      kb: null, kbSeq: 0, fell: false, walk: 0, stunUntil: 0, invulnUntil: 0, planned: false, plannedUntil: 0, raise: null, deadAt: 0,
+      remote: (opts.remote || []).includes(r.slot), net: null, netMoveT: -99,
+      cast: null, gcdUntil: 0, cd: {}, queued: null,
+      stats: { damage: 0, deaths: 0, raisedBy: [], raises: [], busters: [], busy: 0, upT: 0, interrupts: 0, used: {} },
     }));
     this.pc = this.chars[this.playerSlot];
+    this.initSkills(opts);
 
     this.phase.setup(this);
     this.phase.build(this);
@@ -595,6 +675,10 @@ class Sim {
       this.move(this.t + 0.01, 'transit', '轉場：移到本階段起始位置', () => (this.phase.transitSpots ? this.phase.transitSpots(this) : this.phase.start(this.roll)), {
         preview: false, tip: () => `${this.phase.name} 已經開始：移到起始位置（黃圈）。`,
       });
+    }
+    for (const slot of opts.dead || []) {   // 完整體驗：上一階段倒地的人維持倒地
+      const c = this.chars[slot];
+      c.alive = false; c.deathCause = '上一階段倒地'; c.deadAt = this.t;
     }
     this.events.sort((a, b) => a.t - b.t || a.seq - b.seq);
     this.moves.sort((a, b) => a.t - b.t);
@@ -623,23 +707,72 @@ class Sim {
   despawn(a) { if (!a) return; a.dead = true; a.visible = false; }
   alive() { return this.chars.filter((c) => c.alive); }
 
-  /** 死亡。opt.planned：打法內的計畫死亡（自殺流），不算失敗；opt.force：無視無敵（場地邊緣、危險區域）。 */
+  /** 死亡。opt.planned：打法內的計畫死亡（自殺流），不算失敗（opt.until：預計被救起的期限）；opt.force：無視無敵（場地邊緣、危險區域）。 */
   kill(c, cause, opt) {
     if (!c.alive) return;
     const o = opt || {};
     if (!o.force && this.t < c.invulnUntil) return;
-    c.alive = false; c.deathCause = cause; c.goal = null; c.planned = !!o.planned;
+    c.alive = false; c.deathCause = cause; c.goal = null; c.planned = !!o.planned; c.plannedUntil = o.until || 0; c.deadAt = this.t;
+    // 死亡時身上的狀態全部消失、讀條中斷
+    c.thermal = 0; c.searing = false; c.cast = null; c.queued = null; c.raise = null;
+    this.statuses = this.statuses.filter((s) => s.slot !== c.slot);
+    if (isTank(c.slot)) { this.tankSwap = c.slot; this.retarget(this.chars[c.slot === MT ? OT : MT]); }   // 另一位坦克馬上接手
     if (o.planned) { this.log(`${c.key} 死亡（照打法）：${cause}`, c.slot); return; }
+    c.stats.deaths++;
     this.notes.push({ t: this.t, type: 'death', text: cause, slot: c.slot });
     this.log(`${c.key} 死亡：${cause}`, c.slot);
+    if (this.keepGoing) return;   // 繼續打：倒地等復活
     if (!this.failure) this.failure = { t: this.t, slot: c.slot, cause };
     if (this.stopOnDeath && this.status === 'running') this.status = 'failed';
   }
-  /** 復活（接受復活後在屍體位置起身）。 */
-  revive(c, hp) {
-    c.alive = true; c.planned = false; c.deathCause = null; c.hp = hp; c.raise = null; c.kb = null; c.goal = null;
-    this.log(`${c.key} 接受復活`, c.slot);
+  /** 打法失誤（不是死亡，例如自殺流沒倒地、起身時機錯）：立即重來模式判失敗，繼續打模式只記錄。 */
+  mistake(slot, cause) {
+    if (this.status !== 'running') return;
+    if (this.keepGoing) { this.note('hit', cause, slot); this.log(cause, slot); return; }
+    this.failure = this.failure || { t: this.t, slot, cause };
+    this.note('death', cause, slot);
+    this.status = 'failed';
   }
+  /** 計畫倒地中（自殺流等人來救，期限內不算「倒地」）。 */
+  waitingPlan(c) { return !c.alive && c.planned && this.t < c.plannedUntil; }
+  /** 復活（接受復活後在屍體位置起身；屍體在場外就移回場內）。 */
+  revive(c, hp, quiet) {
+    c.alive = true; c.planned = false; c.deathCause = null; c.hp = hp; c.raise = null; c.kb = null; c.goal = null; c.fell = false;
+    const r = Math.hypot(c.pos.x, c.pos.z), lim = this.edgeR - 1.5;
+    if (r > lim) { c.pos.x *= lim / r; c.pos.z *= lim / r; c.prev.x = c.pos.x; c.prev.z = c.pos.z; }
+    if (!quiet) this.log(`${c.key} 接受復活`, c.slot);
+    this.retarget(c);
+  }
+  /** 立刻走向目前這一步的站位（起身、坦克接手時）；真人只更新教學指引。 */
+  retarget(c) {
+    const mv = this.lastMove;
+    if (!mv || !c.alive) return;
+    const spots0 = mv.spots(this), spots = mv.noSwap ? spots0 : this.swapTanks(spots0), sp = spots[c.slot];
+    if (!sp) return;
+    if (this.humans.has(c.slot)) this.guides[c.slot].cur = { id: mv.id, title: mv.title, t: mv.t, spot: { x: sp[0], z: sp[1] }, tip: this.swapNote(c.slot, spots0, spots) + (mv.tip ? mv.tip(c.slot, this) : ''), frame: mv.frame };
+    if (c.auto) { c.goal = { x: sp[0], z: sp[1] }; c.goalAt = this.t; }
+  }
+  /** 點名對象：預定的人倒地時改點 pool 裡下一個活著的人（遊戲不會點到倒地的人）。 */
+  pickAlive(slot, pool) {
+    if (this.chars[slot].alive) return slot;
+    const p = pool || NON_TANKS, i = Math.max(0, p.indexOf(slot));
+    for (let k = 1; k <= p.length; k++) { const s = p[(i + k) % p.length]; if (this.chars[s].alive) return s; }
+    const any = ENMITY.find((s) => this.chars[s].alive);
+    return any === undefined ? slot : any;
+  }
+  /** 仇恨：預定拉怪的坦克（slot）倒地時，Boss 改打另一位坦克，再來依仇恨順序。 */
+  tankFor(slot) {
+    const other = slot === MT ? OT : MT;
+    if (this.chars[slot].alive && !(this.tankSwap === slot && this.chars[other].alive)) return slot;
+    if (this.chars[other].alive) return other;
+    const any = ENMITY.find((s) => this.chars[s].alive);
+    return any === undefined ? slot : any;
+  }
+  mainTank(slot) { return this.chars[this.tankFor(slot === undefined ? (this.phase.activeTank ? this.phase.activeTank(this) : MT) : slot)]; }
+  hasStatus(slot, id) { return this.statuses.some((s) => s.slot === slot && s.id === id && this.t >= s.t0 && (s.t1 === null || this.t <= s.t1)); }
+  partyMitOn() { return this.statuses.some((s) => PARTY_MIT.includes(s.id) && this.t >= s.t0 && (s.t1 === null || this.t <= s.t1)); }
+  /** 大範圍攻擊紀錄（結算：有沒有團隊減傷覆蓋）；小傷害（例如怒震每一下）不記。 */
+  recordRaid(name, pct) { if (pct >= 20) this.raids.push({ t: this.t, name, mit: this.partyMitOn() }); }
   damage(c, pct, why, quiet) {
     if (!c.alive) return;
     c.hp = Math.max(1, c.hp - pct);
@@ -650,6 +783,7 @@ class Sim {
   sound(name) { this.sounds.push({ t: this.t, name }); }
   raidwide(name, pct, tankPct) {
     this.log(`${name} 全體攻擊`);
+    this.recordRaid(name, pct);
     this.screenFx.push({ t: this.t, type: 'raidwide', power: pct >= 40 ? 1 : 0.6 });
     for (const c of this.chars) if (c.alive) this.damage(c, isTank(c.slot) && tankPct !== undefined ? tankPct : pct, name);
   }
@@ -661,6 +795,7 @@ class Sim {
   hazard(o) {
     const tRes = o.tRes, snap = o.snap === undefined ? tRes : o.snap;
     let fx = null, hit = [];
+    if (o.buster) this.at(o.t0, () => this.expect('buster', tRes, o.label));
     this.at(o.t0, () => {
       const g = typeof o.geom === 'function' ? o.geom() : o.geom;
       fx = this.addFx(Object.assign({ t1: tRes, label: o.label || '', tint: o.tint || 'danger', assistFrom: o.assistFrom }, g, { kind: o.kind, t0: o.omen === undefined ? o.t0 : o.omen }));
@@ -682,7 +817,10 @@ class Sim {
       if (o.onResolve) o.onResolve(list, fx);
       if (o.noKill) return;
       for (const c of list) {
-        if (o.tankSafe && isTank(c.slot)) { this.damage(c, o.tankDmg || 45, o.label, o.quiet); c.stats.tankHits = (c.stats.tankHits || 0) + 1; continue; }
+        if (o.tankSafe && isTank(c.slot)) {
+          if (o.buster) c.stats.busters.push({ t: this.t, name: o.label, ok: ['mit', 'invuln', 'lbtank'].some((id) => this.hasStatus(c.slot, id)) });
+          this.damage(c, o.tankDmg || 45, o.label, o.quiet); c.stats.tankHits = (c.stats.tankHits || 0) + 1; continue;
+        }
         this.kill(c, o.killMsg || `被 ${o.label} 擊中`);
       }
     });
@@ -703,29 +841,41 @@ class Sim {
     if (c.thermal) out.push({ id: 'thermal', t1: null, stacks: c.thermal });
     return out;
   }
-  /** 往固定方向 (ux, uz) 擊退 distance。 */
+  /** 往固定方向 (ux, uz) 擊退 distance。開著防擊退的活人不會被擊退（回傳 false）。 */
   knockVec(c, ux, uz, distance, dur) {
+    if (c.alive && this.hasStatus(c.slot, 'antikb')) return false;
     c.kb = { vx: ux * distance / dur, vz: uz * distance / dur, t0: this.t, until: this.t + dur, seq: ++c.kbSeq };
     c.goal = null;
+    return true;
   }
   /** 擊退：從 from 往外推 distance（屍體也會被擊飛）。 */
   knock(c, from, distance, dur) {
     const dx = c.pos.x - from.x, dz = c.pos.z - from.z, d = Math.hypot(dx, dz) || 1;
-    c.kb = { vx: dx / d * distance / dur, vz: dz / d * distance / dur, t0: this.t, until: this.t + dur, seq: ++c.kbSeq };
-    c.goal = null;
+    return this.knockVec(c, dx / d, dz / d, distance, dur);
   }
 
   // ---------------------------------------------------------------- 隊友 AI
   move(t, id, title, spots, opt) {
-    this.moves.push(Object.assign({ t, id, title, spots, jitter: true, preview: true, spread: false, tip: null, frame: '' }, opt || {}));
+    this.moves.push(Object.assign({ t, id, title, spots, jitter: true, preview: true, spread: false, tip: null, frame: '', noSwap: false }, opt || {}));
   }
+  /** 拉怪的坦克倒地：另一位坦克接手他的站位（兩人站位對調，起身的坦克先站另一位的位置；站位表 spots 依職位排列）。 */
+  swapTanks(spots) {
+    const at = this.phase.activeTank ? this.phase.activeTank(this) : MT, other = at === MT ? OT : MT;
+    if ((this.chars[at].alive && this.tankSwap !== at) || !this.chars[other].alive || !spots[at]) return spots;
+    const a = spots.slice(); a[other] = spots[at]; a[at] = spots[other];
+    return a;
+  }
+  /** 接手站位時的教學提示前綴。 */
+  swapNote(slot, spots0, spots) { return spots0[slot] !== spots[slot] ? `（${ROLES[slot === MT ? OT : MT].key} 倒地，由你接手他的站位）` : ''; }
   runMove(mv) {
-    const spots = mv.spots(this);
+    this.lastMove = mv;
+    if (this.tankSwap !== null && this.chars[this.tankSwap].alive) this.tankSwap = null;   // 倒地的坦克已起身：回到原本的分工
+    const spots0 = mv.spots(this), spots = mv.noSwap ? spots0 : this.swapTanks(spots0);
     for (const c of this.chars) {
       const sp = spots[c.slot];
       if (!sp) continue;
       if (this.humans.has(c.slot)) {
-        this.guides[c.slot].cur = { id: mv.id, title: mv.title, t: mv.t, spot: { x: sp[0], z: sp[1] }, tip: mv.tip ? mv.tip(c.slot, this) : '', frame: mv.frame };
+        this.guides[c.slot].cur = { id: mv.id, title: mv.title, t: mv.t, spot: { x: sp[0], z: sp[1] }, tip: this.swapNote(c.slot, spots0, spots) + (mv.tip ? mv.tip(c.slot, this) : ''), frame: mv.frame };
       }
       if (!c.auto || !c.alive) continue;
       let gx = sp[0], gz = sp[1];
@@ -738,7 +888,7 @@ class Sim {
     }
   }
   previewMove(mv) {
-    const spots = mv.spots(this);
+    const spots = mv.noSwap ? mv.spots(this) : this.swapTanks(mv.spots(this));
     for (const slot of this.humans) {
       const sp = spots[slot];
       if (!sp) continue;
@@ -748,7 +898,11 @@ class Sim {
   /** 本機玩家的教學指引。 */
   get guide() { return this.guides[this.playerSlot]; }
   /** 連線：設定遠端真人角色的位置（隊員自己算好的位置）。 */
-  setRemote(slot, x, z, rot) { const c = this.chars[slot]; c.net = { x, z, rot }; }
+  setRemote(slot, x, z, rot) {
+    const c = this.chars[slot];
+    if (c.net && Math.hypot(c.net.x - x, c.net.z - z) > 0.01) c.netMoveT = this.t;   // 讀條中移動要中斷（第一次收到位置不算）
+    c.net = { x, z, rot };
+  }
   /** 連線：某職位改由 AI（斷線、隊員開 AI 代打）或交回遠端真人。 */
   setRemoteAuto(slot, auto) { const c = this.chars[slot]; c.remote = !auto; c.auto = auto; if (!auto) c.goal = null; }
   setPlayerAuto(on) {
@@ -771,7 +925,9 @@ class Sim {
     this.t = t1;
     this.entities(dt);
     if (this.phase.tick) this.phase.tick(this, dt);
+    this.skillStep(dt);
     this.fxStep();
+    this.checkWipe();
   }
 
   entities(dt) {
@@ -804,8 +960,8 @@ class Sim {
       } else if (c.slot === this.playerSlot) {
         const l = Math.hypot(inp.x, inp.z);
         if (l > 0.01) {
-          const k = Math.min(1, l) / l;
-          c.pos.x += inp.x * k * C.SPEED * dt; c.pos.z += inp.z * k * C.SPEED * dt;
+          const k = Math.min(1, l) / l * C.SPEED * this.speedMul(c) * dt;
+          c.pos.x += inp.x * k; c.pos.z += inp.z * k;
           c.rot = Math.atan2(inp.x, inp.z);
         }
       }
@@ -851,11 +1007,38 @@ class Sim {
     const keep = this.chars.map((c) => [c.auto, c.remote]);
     for (const c of this.chars) { c.auto = true; c.remote = false; }   // 快轉時真人也交給 AI
     while (this.status === 'running' && this.t < tTarget) this.step(1 / 60);
-    this.chars.forEach((c, i) => { [c.auto, c.remote] = keep[i]; if (!c.auto) c.goal = null; c.net = null; });
+    this.chars.forEach((c, i) => { [c.auto, c.remote] = keep[i]; if (!c.auto) { c.goal = null; c.cast = null; c.queued = null; } c.net = null; });
+    for (const slot of this.humans) Object.assign(this.chars[slot].stats, { busy: 0, upT: 0, interrupts: 0 });   // GCD 使用率只算玩家自己打的部分
+  }
+
+  /** 繼續打模式：真人全部倒地、沒有人正在救（也沒有人能救）就結束。 */
+  checkWipe() {
+    if (!this.keepGoing || this.status !== 'running') return;
+    const hs = [...this.humans].map((s) => this.chars[s]);
+    if (!hs.every((c) => !c.alive && !this.waitingPlan(c))) { this.wipeT = null; return; }
+    if (this.wipeT === null) this.wipeT = this.t;
+    const pending = hs.some((c) => c.raise) || this.chars.some((c) => c.cast && c.cast.id === 'raise' && this.humans.has(c.cast.tg));
+    const raiser = this.chars.some((c) => c.alive && this.canRaise(c.slot));
+    if ((pending || raiser) && this.t - this.wipeT < 25) return;
+    this.status = 'failed';
+    this.failure = { t: this.t, slot: -1, cause: '全員倒地：真人玩家都倒地，沒有人能復活' };
+    this.note('death', this.failure.cause, -1);
+  }
+
+  /** 放棄這一局（房主／單人按「放棄」）。 */
+  giveUp() {
+    if (this.status !== 'running') return;
+    this.status = 'failed';
+    this.failure = { t: this.t, slot: -1, cause: '放棄這一局' };
   }
 
   finishWith(ok, failMsg) {
     if (this.status !== 'running') return;
+    if (!ok && this.keepGoing) {   // 繼續打：沒覺醒也打到最後（結算標 ✗）
+      this.status = 'cleared'; this.softFail = failMsg;
+      this.log(`${this.phase.name} 結束（${failMsg}）`);
+      return;
+    }
     if (ok) { this.status = 'cleared'; this.log(`${this.phase.name} 通過！`); }
     else {
       this.status = 'failed';
@@ -877,11 +1060,289 @@ class Sim {
 }
 
 root.UWU = {
-  Sim, Actor, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR, isTank, isHealer, dist, inCone, inRect, inCircle, inRing, segInfo,
+  Sim, Actor, C, ROLES, PHASES, STATUS_DEF, PARTY_MIT, WAYMARKS, WM_COLOR, isTank, isHealer, dist, inCone, inRect, inCircle, inRing, segInfo,
   atBearing, bearingOf, norm360, ipos, irot, rotFromBearing, rotateXZ, mulberry32, hash01, shuffler, angDiff,
-  MT, OT, H1, H2, M1, M2, RR, CC,
+  MT, OT, H1, H2, M1, M2, RR, CC, ENMITY, NON_TANKS,
 };
-if (typeof module !== 'undefined' && module.exports) module.exports = root.UWU;
+if (typeof module !== 'undefined' && module.exports) { require('./skills.js'); module.exports = root.UWU; }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* 技能：每個職位的技能列（GCD、讀條、冷卻、衝刺、防擊退、減傷、復活、極限技），以及 AI 隊友用技能
+   （自動復活、接受復活、團隊減傷、坦克減傷、補師 LB3、補師／C 的攻擊讀條）。
+   減傷只檢查使用時機（傷害不致死）；防擊退真的會擋掉擊退；衝刺真的加速。 */
+(function (root) {
+'use strict';
+const U = root.UWU;
+const { Sim, ROLES, dist, isTank, MT, OT, H1, H2, M1, M2, RR, CC } = U;
+
+const GCD = 2.5;
+const SLIDE = 0.5;                       // 讀條最後 0.5 秒可以移動（滑步）
+const RAISE_CAST = 8, RAISE_CAST_C = 10; // 補師 8 秒；C（赤魔）10 秒
+const MELEE = 3;                         // 近戰距離：Boss 目標圈外 3 碼
+const RAISE_RANGE = 30;
+const LB_RATE = 1 / 50;                  // 極限技量表：開打後每 50 秒一格，最多 3 格
+const AI_RAISE_DELAY = 2.5;              // AI 補師在有人倒地多久後開始救
+const AI_ACCEPT_DELAY = 1.5;             // AI 收到復活多久後起身
+
+const SKILLS = {
+  atk: { name: '攻擊', short: '攻擊', gcd: true, melee: true, tip: '近戰 GCD：要站在 Boss 身邊（目標圈外 3 碼內）' },
+  shot: { name: '攻擊', short: '攻擊', gcd: true, tip: '遠程 GCD（瞬發）' },
+  spell: { name: '詠唱攻擊', short: '詠唱', gcd: true, cast: 1.5, tip: '讀條 1.5 秒；讀條中移動會中斷（最後 0.5 秒可以滑步）' },
+  raise: { name: '復活', short: '復活', gcd: true, raise: true, tip: '讀條 8 秒（C 為 10 秒），先開即刻詠唱可瞬發；目標：點隊伍列表選，沒選就救最近的倒地者' },
+  swift: { name: '即刻詠唱', short: '即刻', cd: 60, self: 'swift', dur: 10, tip: '下一個讀條技能變瞬發' },
+  sprint: { name: '衝刺', short: '衝刺', cd: 60, self: 'sprint', dur: 10, tip: '移動速度 +30%，10 秒' },
+  arms: { name: '親疏自行', short: '防擊退', cd: 120, self: 'antikb', dur: 6, tip: '6 秒內不會被擊退' },
+  sure: { name: '沉穩詠唱', short: '防擊退', cd: 120, self: 'antikb', dur: 6, tip: '6 秒內不會被擊退' },
+  mit: { name: '減傷', short: '減傷', cd: 90, self: 'mit', dur: 20, tip: '自身減傷 20 秒（死刑前開）' },
+  inv: { name: '無敵', short: '無敵', cd: 240, self: 'invuln', dur: 10, tip: '無敵 10 秒（死刑前開）' },
+  reprisal: { name: '雪仇', short: '雪仇', cd: 60, party: 'reprisal', dur: 10, tip: '團隊減傷 10 秒（大範圍攻擊前開）' },
+  pmit: { name: '群體減傷', short: '團減', cd: 120, party: 'pmit', dur: 15, tip: '團隊減傷 15 秒（大範圍攻擊前開）' },
+  troub: { name: '團隊減傷', short: '團減', cd: 120, party: 'troub', dur: 15, tip: '團隊減傷 15 秒（大範圍攻擊前開）' },
+  feint: { name: '牽制', short: '牽制', cd: 90, party: 'feint', dur: 10, tip: '團隊減傷 10 秒（大範圍攻擊前開）' },
+  addle: { name: '昏亂', short: '昏亂', cd: 90, party: 'addle', dur: 10, tip: '團隊減傷 10 秒（大範圍攻擊前開）' },
+  lb: { name: '極限技', short: 'LB', lb: true, tip: '坦克：全隊減傷；補師：LB3 全員復活；DPS：大量傷害（量表每 50 秒一格）' },
+};
+const SKILL_IDS = Object.keys(SKILLS);
+const TANK_KIT = ['atk', 'mit', 'inv', 'reprisal', 'arms', 'sprint', 'lb'];
+const HEAL_KIT = ['spell', 'raise', 'swift', 'pmit', 'sure', 'sprint', 'lb'];
+const MELEE_KIT = ['atk', 'feint', 'arms', 'sprint', 'lb'];
+/** 各職位的技能列（依 slot）。 */
+const LOADOUT = [TANK_KIT, TANK_KIT, HEAL_KIT, HEAL_KIT, MELEE_KIT, MELEE_KIT,
+  ['shot', 'troub', 'arms', 'sprint', 'lb'], ['spell', 'raise', 'swift', 'addle', 'sure', 'sprint', 'lb']];
+const RAISERS = [H1, H2, CC];
+/** AI 輪流開團隊減傷的順序。 */
+const MIT_ORDER = [[RR, 'troub'], [H1, 'pmit'], [H2, 'pmit'], [CC, 'addle'], [M1, 'feint'], [M2, 'feint'], [MT, 'reprisal'], [OT, 'reprisal']];
+const SELF_MIT = ['mit', 'invuln', 'lbtank'];
+
+// ---------------------------------------------------------------- 檢查（Sim 與連線的 Mirror 都能用）
+const castTime = (slot, id) => (SKILLS[id].raise ? (slot === CC ? RAISE_CAST_C : RAISE_CAST) : (SKILLS[id].cast || 0));
+/** 可以攻擊的 Boss（看得到、可選取）。 */
+function bossOf(sim) { const look = sim.phase.bossLook; return sim.actors.find((a) => a.look === look && !a.dead && a.visible && a.targetable) || null; }
+const meleeReach = (sim) => (sim.phase.bossR || 3) + MELEE;
+/** 復活目標：指定的人（倒地、還沒被救、沒人正在救）優先，否則最近的倒地者。 */
+function raiseTarget(sim, c, tg) {
+  const ok = (d) => d !== c && !d.alive && !d.raise && dist(d.pos, c.pos) <= RAISE_RANGE
+    && !sim.chars.some((r) => r !== c && r.cast && r.cast.id === 'raise' && r.cast.tg === d.slot);
+  if (tg !== undefined && tg !== null && tg >= 0 && ok(sim.chars[tg])) return sim.chars[tg];
+  return sim.chars.filter(ok).sort((a, b) => dist(a.pos, c.pos) - dist(b.pos, c.pos))[0] || null;
+}
+/** 能不能用（不改變狀態）。回傳 {} 表示可以；否則 why＝原因（'' 表示不用提示），gcdWait＝GCD 還要等幾秒。 */
+function skillCheck(sim, slot, id, tg) {
+  const c = sim.chars[slot], sk = SKILLS[id];
+  if (!LOADOUT[slot].includes(id)) return { why: '沒有這個技能' };
+  if (sim.t < 0) return { why: '還沒開打' };
+  if (!c.alive) return { why: '倒地中不能使用技能' };
+  if (sim.t < c.stunUntil) return { why: c.stunUntil > 900 ? '被關在石牢裡' : '暈眩中' };
+  if (c.cast) return { why: '' };
+  if (sk.lb) {
+    if (sim.lb < 1) return { why: '極限技量表不足' };
+    if (ROLES[slot].kind === 'dps' && !bossOf(sim)) return { why: '沒有可以攻擊的目標' };
+    return {};
+  }
+  if (sk.gcd) {
+    if (sim.t < c.gcdUntil) return { why: '', gcdWait: c.gcdUntil - sim.t };
+    if (sk.raise) return raiseTarget(sim, c, tg) ? {} : { why: '沒有可以復活的對象' };
+    const b = bossOf(sim);
+    if (!b) return { why: '沒有可以攻擊的目標' };
+    if (sk.melee && dist(b.pos, c.pos) > meleeReach(sim)) return { why: '距離太遠：近戰要站在 Boss 身邊' };
+    return {};
+  }
+  const ready = c.cd[id] || 0;
+  if (sim.t < ready) return { why: `${sk.name}冷卻中（${Math.ceil(ready - sim.t)} 秒）` };
+  return {};
+}
+const usable = (sim, slot, id, tg) => skillCheck(sim, slot, id, tg).why === undefined;
+
+// ---------------------------------------------------------------- 模擬
+const P = Sim.prototype;
+P.initSkills = function (opts) {
+  this.lb = opts.lb || 0;
+  this.raids = []; this.aiQ = []; this.aiT = 0; this.wipeT = null; this.softFail = null;
+  if (opts.carry) opts.carry.forEach((cd, i) => { this.chars[i].cd = Object.assign({}, cd); });
+};
+P.speedMul = function (c) { return this.hasStatus(c.slot, 'sprint') ? 1.3 : 1; };
+P.canRaise = (slot) => LOADOUT[slot].includes('raise');
+P.boss = function () { return bossOf(this); };
+/** 讀條中算不算在移動（被擊退也算）。 */
+P.isMoving = function (c) {
+  if (c.kb && this.t < c.kb.until) return true;
+  if (c.remote) return this.t - c.netMoveT < 0.15;
+  return c.walk > 0.3;
+};
+/** 使用技能。回傳 {}＝成功、{ queued }＝排進 GCD 佇列、否則 { why }。 */
+P.useSkill = function (slot, id, tg) {
+  if (this.status !== 'running') return { why: '' };
+  const c = this.chars[slot], sk = SKILLS[id];
+  const chk = skillCheck(this, slot, id, tg);
+  if (chk.why !== undefined) {
+    if (chk.gcdWait !== undefined && chk.gcdWait <= 0.5) { c.queued = { id, tg }; return { queued: true }; }
+    return chk;
+  }
+  if (sk.lb) { this.useLB(c); return {}; }
+  if (sk.gcd) {
+    let ct = castTime(slot, id);
+    const target = sk.raise ? raiseTarget(this, c, tg) : null, tgs = target ? target.slot : -1;
+    if (ct && this.hasStatus(slot, 'swift')) { this.removeStatus(slot, 'swift'); ct = 0; }
+    c.gcdUntil = this.t + Math.max(GCD, ct);
+    c.queued = null;
+    if (ct) c.cast = { id, t0: this.t, t1: this.t + ct, tg: tgs, ai: !!c.auto };
+    else this.skillDone(c, id, tgs, GCD);
+    return {};
+  }
+  c.cd[id] = this.t + sk.cd;
+  c.stats.used[id] = (c.stats.used[id] || 0) + 1;
+  if (sk.self) this.addStatus(slot, sk.self, sk.dur);
+  if (sk.party) for (const o of this.chars) if (o.alive) this.addStatus(o.slot, sk.party, sk.dur);
+  return {};
+};
+/** GCD 技能生效（瞬發或讀條完成）。busy：這個 GCD 佔用的時間（算 GCD 使用率）。 */
+P.skillDone = function (c, id, tg, busy) {
+  c.stats.busy += busy;
+  c.stats.used[id] = (c.stats.used[id] || 0) + 1;
+  if (id !== 'raise') return;
+  const d = this.chars[tg];
+  if (!d || d.alive || d.raise) { this.log(`${c.key} 的復活沒有對象（已經起身或已被救）`, c.slot); return; }
+  d.raise = { by: c.slot, t: this.t };
+  c.stats.raises.push({ t: this.t, slot: tg });
+  this.log(`${c.key} 復活 ${d.key}`, tg);
+};
+/** AI 要用別的技能時，先放棄攻擊讀條。 */
+P.aiFree = function (c) { if (c.cast && c.cast.ai && c.cast.id === 'spell') { c.cast = null; c.gcdUntil = this.t; } };
+/** 接受復活（玩家按 F、AI 自動）。自殺流的計畫倒地交給階段判斷時機。 */
+P.acceptRaise = function (slot) {
+  const c = this.chars[slot];
+  if (c.alive || !c.raise || this.status !== 'running') return false;
+  if (c.planned && this.s.accept) return this.s.accept(slot);
+  this.raiseUp(c);
+  return true;
+};
+/** 起身：HP 30%、5 秒無敵、衰弱（只顯示）。 */
+P.raiseUp = function (c) {
+  const by = c.raise.by, t = this.t;
+  this.revive(c, 30);
+  c.invulnUntil = t + 5; this.addStatus(c.slot, 'transcendent', 5); this.addStatus(c.slot, 'weak', 100);
+  c.stats.raisedBy.push({ t, by });
+};
+P.useLB = function (c) {
+  const lv = Math.min(3, Math.floor(this.lb + 1e-6)), kind = ROLES[c.slot].kind, t = this.t;
+  this.lb -= lv;
+  c.stats.used.lb = (c.stats.used.lb || 0) + 1;
+  this.screenFx.push({ t, type: 'lb', power: 0.4 + lv * 0.2 });
+  this.floats.push({ slot: c.slot, t, text: `LB${lv}`, lb: true });
+  if (kind === 'tank') {
+    for (const o of this.chars) if (o.alive) this.addStatus(o.slot, 'lbtank', [0, 8, 10, 12][lv]);
+    this.log(`${c.key}：坦克極限技 LB${lv}（全隊減傷）`, c.slot);
+  } else if (kind === 'healer') {
+    let n = 0;
+    if (lv >= 3) {
+      for (const d of this.chars) {
+        if (d.alive) continue;
+        this.revive(d, 100, true); n++;
+        d.invulnUntil = t + 5; this.addStatus(d.slot, 'transcendent', 5);
+        d.stats.raisedBy.push({ t, by: c.slot, lb: true });
+      }
+    }
+    for (const o of this.chars) if (o.alive) o.hp = Math.min(100, o.hp + [0, 30, 60, 100][lv]);
+    this.log(`${c.key}：補師極限技 LB${lv}${n ? `（${n} 人復活）` : '（全隊回復）'}`, c.slot);
+  } else this.log(`${c.key}：極限技 LB${lv}（大量傷害）`, c.slot);
+};
+/** 機制預告（給 AI 用減傷）：kind 'raid'＝大範圍攻擊、'buster'＝死刑；tRes 判定時間。 */
+P.expect = function (kind, tRes) {
+  if (kind === 'raid') {
+    this.aiQ.push({ t: Math.max(this.t, tRes - 4), fn: () => {
+      if (this.partyMitOn()) return;
+      for (const [slot, id] of MIT_ORDER) {
+        const c = this.chars[slot];
+        if (!c.auto || !c.alive || (c.cd[id] || 0) > this.t) continue;
+        this.aiFree(c);
+        if (usable(this, slot, id)) { this.useSkill(slot, id); return; }
+      }
+    } });
+  } else if (kind === 'buster') {
+    this.aiQ.push({ t: Math.max(this.t, tRes - 2.5), fn: () => {
+      const c = this.mainTank();
+      if (!c.auto || !isTank(c.slot) || SELF_MIT.some((id) => this.hasStatus(c.slot, id))) return;
+      for (const id of ['mit', 'inv']) if (usable(this, c.slot, id)) { this.useSkill(c.slot, id); return; }
+    } });
+  }
+};
+/** 每一步：極限技量表、讀條（移動中斷／完成）、GCD 佇列、AI 起身、AI 判斷。 */
+P.skillStep = function (dt) {
+  const t = this.t;
+  if (t >= 0) this.lb = Math.min(3, this.lb + dt * LB_RATE);
+  const up = t >= 0 && !!bossOf(this);
+  for (const c of this.chars) {
+    if (up && c.alive && t >= c.stunUntil) c.stats.upT += dt;
+    const k = c.cast;
+    if (k) {
+      if (t < c.stunUntil) { c.cast = null; c.gcdUntil = t; }
+      else if (!k.ai && t < k.t1 - SLIDE && this.isMoving(c)) {
+        c.cast = null; c.gcdUntil = t; c.stats.interrupts++;
+        this.floats.push({ slot: c.slot, t, text: '中斷' });
+      } else if (k.ai && k.id === 'spell' && c.goal && t >= c.goalAt) { c.cast = null; c.gcdUntil = t; }   // AI 要移動：放棄攻擊讀條
+      else if (t >= k.t1) { c.cast = null; this.skillDone(c, k.id, k.tg, Math.max(GCD, k.t1 - k.t0)); }
+    }
+    if (c.queued && !c.cast && t >= c.gcdUntil) { const q = c.queued; c.queued = null; this.useSkill(c.slot, q.id, q.tg); }
+    if (!c.alive && c.raise && c.auto && !this.waitingPlan(c) && t - c.raise.t >= AI_ACCEPT_DELAY) this.acceptRaise(c.slot);
+  }
+  if (this.aiQ.length) {
+    for (const q of this.aiQ) if (t >= q.t) { q.done = true; q.fn(); }
+    this.aiQ = this.aiQ.filter((q) => !q.done);
+  }
+  this.aiT -= dt;
+  if (this.aiT <= 0) { this.aiT = 0.25; this.aiThink(); }
+};
+/** AI 隊友：救人、補師 LB3、補師／C 站著時讀攻擊（畫面用）。 */
+P.aiThink = function () {
+  const t = this.t;
+  if (t < 0) return;
+  const beingRaised = (d) => this.chars.some((r) => r.cast && r.cast.id === 'raise' && r.cast.tg === d.slot);
+  const dead = this.chars.filter((d) => !d.alive && !d.raise && !this.waitingPlan(d) && t - d.deadAt >= AI_RAISE_DELAY && !beingRaised(d));
+  if (dead.length) {
+    const pri = (d) => (this.humans.has(d.slot) ? 0 : isTank(d.slot) ? 1 : RAISERS.includes(d.slot) ? 2 : 3);
+    dead.sort((a, b) => pri(a) - pri(b) || a.deadAt - b.deadAt);
+    for (const slot of RAISERS) {
+      const r = this.chars[slot];
+      if (!r.auto || !r.alive || t < r.stunUntil) continue;
+      if (r.cast ? !(r.cast.ai && r.cast.id === 'spell') : t < r.gcdUntil) continue;
+      const d = dead.find((x) => dist(x.pos, r.pos) <= RAISE_RANGE);
+      if (!d) continue;
+      this.aiFree(r);
+      if (usable(this, slot, 'swift')) this.useSkill(slot, 'swift');
+      this.useSkill(slot, 'raise', d.slot);
+      dead.splice(dead.indexOf(d), 1);
+      if (!dead.length) break;
+    }
+  }
+  if (this.lb >= 3 && this.chars.filter((d) => !d.alive && !this.waitingPlan(d)).length >= 3) {
+    const h = [H1, H2].map((s) => this.chars[s]).find((x) => x.auto && x.alive && t >= x.stunUntil);
+    if (h) { this.aiFree(h); if (usable(this, h.slot, 'lb')) this.useSkill(h.slot, 'lb'); }
+  }
+  if (!bossOf(this)) return;
+  for (const c of this.chars) {
+    if (!c.auto || !c.alive || c.cast || c.goal || c.walk > 0.1 || LOADOUT[c.slot][0] !== 'spell') continue;
+    if (usable(this, c.slot, 'spell')) this.useSkill(c.slot, 'spell');
+  }
+};
+/** 結算用的技能統計。 */
+P.skillSummary = function (slot) {
+  const c = this.chars[slot], st = c.stats;
+  return {
+    uptime: st.upT >= 5 && st.busy > 0 ? Math.min(100, Math.round(st.busy / st.upT * 100)) : null,   // 完全沒用技能就不顯示
+    interrupts: st.interrupts,
+    busters: st.busters.map((b) => ({ t: b.t, name: b.name, ok: b.ok })),
+    raids: this.raids.map((r) => ({ t: r.t, name: r.name, ok: r.mit })),
+    deaths: st.deaths,
+    raisedBy: st.raisedBy.map((r) => ({ t: r.t, by: ROLES[r.by].key, lb: !!r.lb })),
+    raises: st.raises.map((r) => ({ t: r.t, who: ROLES[r.slot].key })),
+    lb: st.used.lb || 0,
+  };
+};
+
+U.SKILLS = SKILLS; U.SKILL_IDS = SKILL_IDS; U.LOADOUT = LOADOUT; U.RAISERS = RAISERS; U.GCD = GCD;
+U.skillCheck = skillCheck; U.bossOf = bossOf; U.meleeReach = meleeReach; U.castTime = castTime; U.raiseTarget = raiseTarget;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -1000,30 +1461,32 @@ function setup(S) {
 function build(S) {
   const R = S.roll, s = S.s, at = (t, fn) => S.at(t, fn);
   const g = s.garuda;
-  const mtc = () => S.chars[MT];
+  const mtc = () => S.mainTank();   // MT 倒地時 Garuda 改面向 OT（再來依仇恨順序）
   const faceMT = () => { g.rot = Math.atan2(mtc().pos.x - g.pos.x, mtc().pos.z - g.pos.z); };
   s.gw = {}; s.rains = []; s.charges = 0; s.woken = false; s.plumes = []; s.shard = null; s.bubble = null; s.clones = [];
   const SONG = { intercept: 59, behind: 15 };
 
   // ---------------------------------------------------------------- 機制
   const slipstream = (t0, quiet) => S.hazard({
-    t0, tRes: t0 + 2.49, kind: 'cone', label: 'Slipstream（螺旋氣流）', tankSafe: true, tankDmg: 60, quiet,
+    t0, tRes: t0 + 2.49, kind: 'cone', label: 'Slipstream（螺旋氣流）', tankSafe: true, tankDmg: 60, quiet, buster: true,
     geom: () => { faceMT(); return { x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }; },
     castBy: ['Garuda', 'Slipstream', 2.2],
     killMsg: '被 Slipstream（Garuda 正面扇形）擊中：非坦克不能站正面',
   });
 
-  const downburst = (tRes) => S.hazard({
-    t0: tRes - 4.5, omen: tRes - 2.5, assistFrom: tRes - 4.5, tRes, kind: 'cone', label: 'Downburst（下行突風）', tankSafe: true, tankDmg: 45,
-    geom: () => ({ x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }),
-    follow: (f) => { f.x = g.pos.x; f.z = g.pos.z; f.rot = Math.atan2(mtc().pos.x - g.pos.x, mtc().pos.z - g.pos.z); },
+  // 扇形的對象在讀條開始時就鎖定（讀條中 MT 倒地也不會轉向別人）
+  const downburst = (tRes) => { let tg = null; return S.hazard({
+    t0: tRes - 4.5, omen: tRes - 2.5, assistFrom: tRes - 4.5, tRes, kind: 'cone', label: 'Downburst（下行突風）', tankSafe: true, tankDmg: 45, buster: true,
+    geom: () => { tg = mtc(); return { x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }; },
+    follow: (f) => { f.x = g.pos.x; f.z = g.pos.z; f.rot = Math.atan2(tg.pos.x - g.pos.x, tg.pos.z - g.pos.z); },
     killMsg: '被 Downburst 扇形（Garuda→MT 方向）擊中',
-  });
+  }); };
 
-  const song = (srcFn, targetSlot, tMark, tShow, tRes, spotKey, label) => {
-    let fx = null, src = null;
+  const song = (srcFn, slot0, tMark, tShow, tRes, spotKey, label) => {
+    let fx = null, src = null, targetSlot = slot0;
     at(tMark, () => {
       src = srcFn();
+      targetSlot = S.pickAlive(slot0);   // 預定的人倒地 → 點下一個活著的非坦克
       S.mark(targetSlot, 'song', tMark, tRes);
       fx = S.addFx({ kind: 'rect', x: src.pos.x, z: src.pos.z, w: K.SONG_HALF * 2, len: K.SONG_LEN, t0: tShow, assistFrom: tMark, t1: tRes, label, tint: 'line' });
       fx.follow = (f) => { const tg = S.chars[targetSlot]; f.x = src.pos.x; f.z = src.pos.z; f.rot = Math.atan2(tg.pos.x - src.pos.x, tg.pos.z - src.pos.z); };
@@ -1098,8 +1561,8 @@ function build(S) {
   const friction = (slot, tCast, tRes) => {
     let target = null;
     at(tCast, () => {
-      target = S.chars[slot];
-      S.mark(slot, 'friction', tCast, tRes);
+      target = S.chars[S.pickAlive(slot)];
+      S.mark(target.slot, 'friction', tCast, tRes);
       const fx = S.addFx({ kind: 'circle', x: target.pos.x, z: target.pos.z, r: K.FRIC_R, t0: tCast, t1: tRes, label: 'Friction（烈風刃）', tint: 'share' });
       fx.follow = (f) => { f.x = target.pos.x; f.z = target.pos.z; };
       S.cast('Garuda', 'Friction（烈風刃）', tCast, 1.7);
@@ -1153,9 +1616,10 @@ function build(S) {
   slipstream(20.61, false);
   plumesGather({ x: 0.6, z: 3.2 }, 23.1, [30.6, 31.5, 32.3, 33.1], 24.5);
   downburst(26.58);
-  at(26.71, () => { S.log('刺羽攻擊 OT：+1 層低氣壓'); addThermal(S.chars[OT]); });
+  const spinyHit = () => { const c = S.chars[S.pickAlive(OT, [OT, MT])]; S.log(`刺羽攻擊 ${c.key}：+1 層低氣壓`); addThermal(c); };
+  at(26.71, spinyHit);
   at(33.0, () => s.spiny.moveTo(-5.6, -0.4, 2.5));
-  at(35.85, () => { S.log('刺羽攻擊 OT：+1 層低氣壓'); addThermal(S.chars[OT]); });
+  at(35.85, spinyHit);
   at(36.5, () => s.spiny.moveTo(BUBBLE_AT.x, BUBBLE_AT.z, 2));
 
   // 羽毛雨 ① + 刺羽爆炸 + 寒風之嘯
@@ -1166,7 +1630,7 @@ function build(S) {
     t0: 38.21, tRes: 41.19, kind: 'circle', label: '刺羽爆炸（Gigastorm）', castBy: ['刺羽', 'Gigastorm', 2.7],
     geom: { x: BUBBLE_AT.x, z: BUBBLE_AT.z, r: K.GIGA_R }, killMsg: '被刺羽爆炸（半徑 5）擊中',
   });
-  at(38.3, () => S.cast('Garuda', 'Mistral Shriek（寒風之嘯）', 38.3, 2.7));
+  at(38.3, () => { S.cast('Garuda', 'Mistral Shriek（寒風之嘯）', 38.3, 2.7); S.expect('raid', 41.28); });
   at(41.28, () => S.raidwide('Mistral Shriek', 40));
 
   // 高氣壓圈 + 烈風刃 ×2
@@ -1182,7 +1646,7 @@ function build(S) {
   // 羽毛雨 ② + 大氣爆發
   warp(68.81, 70.37, 70.95, 70.96, 73.09, { x: 0, z: -0.6 });
   featherRain(1, 68.90, 70.42, 71.40);
-  at(73.18, () => S.cast('Garuda', 'Aerial Blast（大氣爆發）', 73.18, 2.7));
+  at(73.18, () => { S.cast('Garuda', 'Aerial Blast（大氣爆發）', 73.18, 2.7); S.expect('raid', 76.17); });
   at(76.17, () => S.raidwide('Aerial Blast', 50));
 
   // 分身登場：羽毛雨 ③、寒風之歌 ×2、台風眼 + 邪輪旋風
@@ -1270,10 +1734,11 @@ function build(S) {
     geom: () => ({ x: g.pos.x, z: g.pos.z, inner: K.WHEEL_IN2, r: 45 }),
     killMsg: '被覺醒邪輪旋風第 2 段（環形）擊中：要貼近 Garuda（6.5 以內）',
   });
+  let shareTg = null;
   S.hazard({
     t0: 152.1, omen: 152.1, tRes: 154.6, kind: 'cone', label: 'Downburst（覺醒）8 人分攤', tint: 'share', noKill: true,
-    geom: () => ({ x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }),
-    follow: (f) => { f.x = g.pos.x; f.z = g.pos.z; f.rot = Math.atan2(mtc().pos.x - g.pos.x, mtc().pos.z - g.pos.z); },
+    geom: () => { shareTg = mtc(); return { x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }; },
+    follow: (f) => { f.x = g.pos.x; f.z = g.pos.z; f.rot = Math.atan2(shareTg.pos.x - g.pos.x, shareTg.pos.z - g.pos.z); },
     castBy: ['Garuda', 'Downburst（覺醒）', 2.5],
     onResolve: (inside) => {
       const n = inside.length;
@@ -1497,7 +1962,7 @@ function build(S) {
 function tick(S, dt) {
   const s = S.s;
   const g = s.garuda;
-  if (g && S.t >= 0 && g.visible && !g.dead && g.targetable) { const m = S.chars[MT]; g.rot = Math.atan2(m.pos.x - g.pos.x, m.pos.z - g.pos.z); }
+  if (g && S.t >= 0 && g.visible && !g.dead && g.targetable) { const m = S.mainTank(); g.rot = Math.atan2(m.pos.x - g.pos.x, m.pos.z - g.pos.z); }
   for (const p of S.actors) {
     if (p.look !== 'plume' || p.dead || !p.drain) continue;
     p.hp = Math.max(0, p.hp - p.drain * dt);
@@ -1595,6 +2060,7 @@ const ROLE_DESC = [
 
 PHASES.p1 = {
   id: 'p1', name: 'P1 迦樓羅', short: '迦樓羅', preRoll: -5, end: K.END, maxCharges: K.CHARGES, chargeLabel: '覺醒',
+  bossLook: 'garuda', bossR: 3,
   checkpoints: CHECKPOINTS, cues: CUES, roleDesc: ROLE_DESC,
   roll, setup, build, tick, objectives,
   start: spawnSpots,
@@ -1689,7 +2155,7 @@ function build(S) {
   const ifrit = s.ifrit;
   const plan = runPlan(R);
   const ESPOT = (b) => atBearing(b, K.EDGE_R);
-  const faceTank = () => { const c = S.chars[s.tank]; ifrit.rot = Math.atan2(c.pos.x - ifrit.pos.x, c.pos.z - ifrit.pos.z); };
+  const faceTank = () => { const c = S.mainTank(); ifrit.rot = Math.atan2(c.pos.x - ifrit.pos.x, c.pos.z - ifrit.pos.z); };   // 拉怪坦克倒地 → 面向另一位坦克
   s.faceTank = faceTank;
   const HW1 = R.howl1, HW2 = R.howl2;
 
@@ -1703,13 +2169,14 @@ function build(S) {
     });
   };
 
-  const incinerate = (t) => S.hazard({
-    t0: t - 1.2, omen: t - 1.2, tRes: t, kind: 'cone', label: 'Incinerate（烈焰焚燒）', tankSafe: true, tankDmg: 40,
-    geom: () => { faceTank(); return { x: ifrit.pos.x, z: ifrit.pos.z, rot: ifrit.rot, half: K.INC_HALF, len: K.INC_LEN }; },
-    follow: (f) => { const c = S.chars[s.tank]; f.x = ifrit.pos.x; f.z = ifrit.pos.z; f.rot = Math.atan2(c.pos.x - ifrit.pos.x, c.pos.z - ifrit.pos.z); },
+  // 扇形的對象在讀條開始時就鎖定（讀條中坦克倒地也不會轉向別人）
+  const incinerate = (t) => { let tg = null; return S.hazard({
+    t0: t - 1.2, omen: t - 1.2, tRes: t, kind: 'cone', label: 'Incinerate（烈焰焚燒）', tankSafe: true, tankDmg: 40, buster: true,
+    geom: () => { tg = S.mainTank(); faceTank(); return { x: ifrit.pos.x, z: ifrit.pos.z, rot: ifrit.rot, half: K.INC_HALF, len: K.INC_LEN }; },
+    follow: (f) => { f.x = ifrit.pos.x; f.z = ifrit.pos.z; f.rot = Math.atan2(tg.pos.x - ifrit.pos.x, tg.pos.z - ifrit.pos.z); },
     castBy: ['伊弗利特', 'Incinerate', 1.2],
     killMsg: '被 Incinerate（伊弗利特正面扇形）擊中：非坦克不能站正面',
-  });
+  }); };
 
   const searingPulse = (slotFn, t) => {
     S.hazard({
@@ -1729,10 +2196,15 @@ function build(S) {
     });
   };
   const howl = (slotFn, tCast, tOn, dur, pulses) => {
+    let who = slotFn();
+    const cur = () => who;
     at(tCast, () => { S.cast('伊弗利特', 'Inferno Howl（灼熱咆哮）', tCast, 1.7); });
-    at(tOn, () => { const h = S.chars[slotFn()]; h.searing = true; S.addStatus(h.slot, 'searing', dur); S.log(`${h.key} 被點名灼熱咆哮：遠離人群`, h.slot); });
-    at(tOn + dur, () => { S.chars[slotFn()].searing = false; });
-    for (const p of pulses) searingPulse(slotFn, p);
+    at(tOn, () => {
+      who = S.pickAlive(slotFn(), [H1, H2, M1, M2, RR, CC]);   // 預定的補師倒地 → 點下一個活著的人
+      const h = S.chars[who]; h.searing = true; S.addStatus(h.slot, 'searing', dur); S.log(`${h.key} 被點名灼熱咆哮：遠離人群`, h.slot);
+    });
+    at(tOn + dur, () => { S.chars[who].searing = false; });
+    for (const p of pulses) searingPulse(cur, p);
   };
 
   // 地火噴發：以「距離伊弗利特最遠的 2 名無熱風玩家」為落點，連續 4 輪
@@ -1767,9 +2239,10 @@ function build(S) {
   };
 
   // 烈焰碎擊：分攤後掛詛咒之炎 DOT（每 3 秒一跳），持續時間依人數：≥6 人 2 秒（不跳）、5 人 4 秒（跳 1 次）、<5 人 30 秒（致死）
-  const crush = (slot, tMark, tRes) => {
-    let stack = [];
+  const crush = (slot0, tMark, tRes) => {
+    let stack = [], slot = slot0;
     at(tMark, () => {
+      slot = S.pickAlive(slot0, [M1, M2, RR, CC, H1, H2]);
       S.mark(slot, 'crush', tMark, tRes);
       const fx = S.addFx({ kind: 'circle', r: K.CRUSH_R, t0: tMark, t1: tRes, label: 'Flaming Crush（烈焰碎擊）', tint: 'share', assistFrom: tMark });
       fx.follow = (f) => { const c = S.chars[slot]; f.x = c.pos.x; f.z = c.pos.z; };
@@ -1821,7 +2294,7 @@ function build(S) {
   at(10.15, () => { ifrit.pos.x = 0; ifrit.pos.z = 0; ifrit.rot = 0; });
   at(10.24, () => { ifrit.visible = true; });
   at(12.29, () => { ifrit.targetable = true; });
-  at(12.38, () => S.cast('伊弗利特', 'Hellfire（地獄之火炎）', 12.38, 2.7));
+  at(12.38, () => { S.cast('伊弗利特', 'Hellfire（地獄之火炎）', 12.38, 2.7); S.expect('raid', 15.37); });
   at(15.37, () => S.raidwide('Hellfire', 65, 25));
   at(23.56, () => S.raidwide('Vulcan Burst（火神爆裂，擊退視為已用群盾擋下）', 15));
   incinerate(26.38); incinerate(29.50); incinerate(33.60);
@@ -1861,7 +2334,7 @@ function build(S) {
   // ---------------------------------------------------------------- 時間軸：覺醒後
   at(75.25, () => { ifrit.pos.x = 0; ifrit.pos.z = 0; ifrit.rot = 0; });
   at(75.30, () => { ifrit.visible = true; ifrit.targetable = true; });
-  at(75.38, () => S.cast('伊弗利特', 'Hellfire（地獄之火炎）', 75.38, 2.7));
+  at(75.38, () => { S.cast('伊弗利特', 'Hellfire（地獄之火炎）', 75.38, 2.7); S.expect('raid', 78.37); });
   at(78.37, () => S.raidwide('Hellfire', 65, 25));
   at(79.5, () => { const p = rot([-9.7, 9.4], R.rotB); ifrit.moveTo(p[0], p[1], 4); });
   howl(() => HW2, 84.74, 86.70, 30.9, [92.68, 98.69, 104.70, 110.72, 116.74]);
@@ -2136,6 +2609,7 @@ const ROLE_DESC = [
 
 PHASES.p2 = {
   id: 'p2', name: 'P2 伊弗利特', short: '伊弗利特', preRoll: -3, end: K.END, maxCharges: K.CHARGES, chargeLabel: '覺醒',
+  bossLook: 'ifrit', bossR: 3.5, activeTank: (S) => S.s.tank,
   checkpoints: CHECKPOINTS, cues: CUES, roleDesc: ROLE_DESC,
   roll, setup, build, tick, objectives,
   start: () => { const a = fp('P2A-F01'); a[MT] = [0.3, -0.3]; return a; },
@@ -2196,6 +2670,7 @@ const RAISES = [
 ];
 // 起身：0:45 石牢點名前不能起；三顆石牢形成（0:50）～開始踩地板（0:55）之間起身；AI 在三連桶炸完後起（0:53.5）
 const RISE = { early: 45.0, win0: 50.2, win1: 55.5, auto: 53.5, deadline: 66.5, lastGrace: 3.5 };
+const RR_DEADLINE = 65.0 + RISE.lastGrace + 1;
 
 const fp = (id) => { const f = FR[id].pos; return ROLES.map((r) => (f[r.key] ? f[r.key].slice() : null)); };
 const near = (p, dx, dz) => [p[0] + dx, p[1] + dz];
@@ -2321,12 +2796,7 @@ function build(S) {
   const R = S.roll, s = S.s, at = (t, fn) => S.at(t, fn);
   const titan = s.titan;
   const sui = S.variant === 'suicide';
-  const fail = (slot, cause) => {
-    if (S.status !== 'running') return;
-    S.failure = S.failure || { t: S.t, slot, cause };
-    S.note('death', cause, slot);
-    S.status = 'failed';
-  };
+  const fail = (slot, cause) => S.mistake(slot, cause);
   const dirTo = (p) => Math.atan2(p.x - titan.pos.x, p.z - titan.pos.z);
   const lift = (t0, t1, from, to) => s.anim.push({ t0, t1, from, to });
 
@@ -2335,18 +2805,20 @@ function build(S) {
     t0: tJump, omen: tLand - 1.0, assistFrom: tJump, tRes: tLand, kind: 'circle', label: 'Geocrush（大地粉碎）',
     geom: { x: p.x, z: p.z, r: K.GEO_KILL },
     killMsg: `大地粉碎：離泰坦落點太近（${K.GEO_KILL} 以內）被秒殺`,
-    onResolve: () => { S.screenFx.push({ t: S.t, type: 'raidwide', power: 1 }); S.sound('quake'); for (const c of S.alive()) S.damage(c, 25, 'Geocrush', true); },
+    onResolve: () => { S.screenFx.push({ t: S.t, type: 'raidwide', power: 1 }); S.sound('quake'); S.recordRaid('Geocrush（大地粉碎）', 25); for (const c of S.alive()) S.damage(c, 25, 'Geocrush', true); },
   });
   const raid = (name, pct, power) => {
     S.screenFx.push({ t: S.t, type: 'raidwide', power });
+    S.recordRaid(name, pct);
     for (const c of S.alive()) S.damage(c, pct, name, true);
   };
-  const buster = (t, name) => S.hazard({
-    t0: t - 0.8, omen: t - 0.8, tRes: t, kind: 'cone', label: name, tankSafe: true, tankDmg: 55,
-    geom: () => ({ x: titan.pos.x, z: titan.pos.z, rot: dirTo(S.chars[MT].pos), half: K.BUSTER_HALF, len: K.BUSTER_LEN, npcIgnore: [MT] }),
-    follow: (f) => { f.x = titan.pos.x; f.z = titan.pos.z; f.rot = dirTo(S.chars[MT].pos); },
+  // 順劈的對象在讀條開始時就鎖定（讀條中 MT 倒地也不會轉向人群）
+  const buster = (t, name) => { let mt = null; return S.hazard({
+    t0: t - 0.8, omen: t - 0.8, tRes: t, kind: 'cone', label: name, tankSafe: true, tankDmg: 55, buster: true,
+    geom: () => { mt = S.mainTank(); return { x: titan.pos.x, z: titan.pos.z, rot: dirTo(mt.pos), half: K.BUSTER_HALF, len: K.BUSTER_LEN, npcIgnore: [mt.slot] }; },
+    follow: (f) => { f.x = titan.pos.x; f.z = titan.pos.z; f.rot = dirTo(mt.pos); },
     killMsg: `被${name}（泰坦正面順劈）擊中：非坦克不能站在泰坦正面`,
-  });
+  }); };
   /** 大地之重：每個活著的人腳下出圈。onHit(c) 決定被打到的結果。 */
   const wotl = (tAppear, tRes, onHit) => {
     let spots = [];
@@ -2400,7 +2872,7 @@ function build(S) {
   /** 泰坦跳起（面向 = 落點方向）→ 消失 → 落在場邊。 */
   const jump = (tTurn, tLand, bearing) => {
     const land = U.atBearing(bearing, K.EDGE);
-    at(tTurn, () => { s.faceMT = false; titan.rot = rotFromBearing(bearing); titan.targetable = false; titan.goal = null; S.log(`泰坦轉向 ${DIR4[bearing]} 並跳起：落點就是他面向的正點，去最遠的地方`); S.sound('jump'); });
+    at(tTurn, () => { s.faceMT = false; titan.rot = rotFromBearing(bearing); titan.targetable = false; titan.goal = null; S.log(`泰坦轉向 ${DIR4[bearing]} 並跳起：落點就是他面向的正點，去最遠的地方`); S.sound('jump'); S.expect('raid', tLand); });
     lift(tTurn + 0.6, tTurn + 1.3, 0, 1);
     at(tTurn + 1.3, () => { titan.visible = false; });
     geocrush(tTurn + 0.6, tLand, land);
@@ -2411,12 +2883,12 @@ function build(S) {
   };
 
   // ---------------------------------------------------------------- 時間軸：覺醒前
-  at(0.0, () => S.log('伊弗利特消失。泰坦從天而降（大地粉碎）：留在場地外圍，離中心 16 以上'));
+  at(0.0, () => { S.log('伊弗利特消失。泰坦從天而降（大地粉碎）：留在場地外圍，離中心 16 以上'); S.expect('raid', 4.5); });
   at(3.6, () => { titan.pos.x = 0; titan.pos.z = 0; titan.visible = true; titan.rot = rotFromBearing(norm360(s.O)); });
   lift(3.9, 4.5, 1, 0);
   geocrush(0.0, 4.5, { x: 0, z: 0 });
   at(5.0, () => { s.faceMT = true; });
-  at(7.0, () => { titan.targetable = true; S.cast('泰坦', 'Earthen Fury（大地之怒）', 7.0, 3.0); });
+  at(7.0, () => { titan.targetable = true; S.cast('泰坦', 'Earthen Fury（大地之怒）', 7.0, 3.0); S.expect('raid', 13.0); });
   at(13.0, () => { raid('Earthen Fury（大地之怒）', 35, 0.8); S.log('大地之怒：全體攻擊'); });
   buster(19.0, 'Rock Buster（碎岩）');
   buster(22.0, 'Mountain Buster（山崩）');
@@ -2424,7 +2896,7 @@ function build(S) {
   wotl(23.0, 26.0);
   wotl(26.0, 29.0, (hit) => {
     for (const c of hit) {
-      if (sui && SUI.includes(c.slot)) S.kill(c, '自殺流：留在第二波大地之重裡', { planned: true });
+      if (sui && SUI.includes(c.slot)) S.kill(c, '自殺流：留在第二波大地之重裡', { planned: true, until: c.slot === RR ? RR_DEADLINE : RISE.deadline });
       else S.kill(c, '被大地之重（腳下的圈，半徑 4）擊中');
     }
     if (sui) for (const k of SUI) if (S.chars[k].alive) fail(k, `自殺流：${ROLES[k].key} 要留在第二波大地之重裡死亡（只剩 MT／H1／H2／C 活著，石牢才會固定點 H1／H2／C）`);
@@ -2443,7 +2915,7 @@ function build(S) {
   at(43.0, () => {
     const u = kbDir();
     raid('Upheaval（大怒震）', 12, 0.7);
-    for (const c of S.alive()) { S.knockVec(c, u.x, u.z, K.KB, K.KB_DUR); c.stunUntil = 45.0; S.addStatus(c.slot, 'stun', 2.0); }
+    for (const c of S.alive()) if (S.knockVec(c, u.x, u.z, K.KB, K.KB_DUR)) { c.stunUntil = 45.0; S.addStatus(c.slot, 'stun', 2.0); }   // 開防擊退：不被擊退也不暈眩
     S.sound('knock');
     S.log('大怒震：全員被擊退並暈眩 2 秒');
   });
@@ -2529,26 +3001,32 @@ function build(S) {
   // ---------------------------------------------------------------- 自殺流：復活
   if (sui) {
     s.autoAccept = { [OT]: RISE.auto, [M1]: RISE.auto, [M2]: RISE.auto, [RR]: 65.5 };
+    // 復活由技能完成：AI 補師／C 照分配的時間施放（即刻＝瞬發；R 用 10 秒讀條）；真人補師要自己按
     for (const r of RAISES) {
-      if (r.cast) at(r.cast, () => { if (S.chars[r.by].alive) S.cast(ROLES[r.by].key, `復活 → ${ROLES[r.slot].key}（${r.how}）`, r.cast, r.t - r.cast); });
-      at(r.t, () => {
+      at(r.cast || r.t, () => {
         const c = S.chars[r.slot], by = S.chars[r.by];
-        if (c.alive || !by.alive) return;
-        c.raise = { by: r.by, t: r.t };
-        S.log(`${ROLES[r.by].key} 復活 ${ROLES[r.slot].key}（${r.how}）：先別起身，等三顆石牢形成`, r.slot);
+        if (c.alive || c.raise || !by.alive || !by.auto) return;
+        S.aiFree(by);
+        if (!r.cast) S.useSkill(r.by, 'swift');
+        S.useSkill(r.by, 'raise', r.slot);
       });
     }
-    // 沒有及時起身
-    at(RISE.deadline, () => { for (const k of [OT, M1, M2]) { const c = S.chars[k]; if (!c.alive && c.raise) fail(k, `${ROLES[k].key} 沒有接受復活（要在 0:50～0:55 起身）`); } });
-    at(65.0 + RISE.lastGrace + 1, () => { const c = S.chars[RR]; if (!c.alive && c.raise) fail(RR, 'R 沒有接受復活（C 的 10 秒復活到了就要起身）'); });
+    // 期限到了還沒起身：沒被救（補師的失誤）或救了沒接受（倒地者的失誤）
+    const late = (k, deadline) => {
+      const c = S.chars[k], r = RAISES.find((x) => x.slot === k);
+      if (c.alive) return;
+      if (c.raise) fail(k, k === RR ? 'R 沒有接受復活（C 的 10 秒復活到了就要起身）' : `${ROLES[k].key} 沒有接受復活（要在 0:50～0:55 起身）`);
+      else if (c.planned) fail(r.by, `${ROLES[r.by].key} 沒有復活 ${ROLES[k].key}（${k === RR ? '踩地板期間 10 秒詠唱' : '0:50 前'}）`);
+    };
+    at(RISE.deadline, () => { for (const k of [OT, M1, M2]) late(k); });
+    at(RR_DEADLINE, () => late(RR));
   }
   /** 接受復活（玩家按 F／AI 自動）。 */
   s.accept = (slot) => {
     const c = S.chars[slot];
     if (c.alive || !c.raise || S.status !== 'running') return false;
     const t = S.t, last = slot === RR;
-    S.revive(c, 30);
-    c.invulnUntil = t + 5; S.addStatus(slot, 'transcendent', 5);
+    S.raiseUp(c);
     c.stats.rise = t;
     if (!last && t < RISE.early) { fail(slot, `太早接受復活（${(t / 60 | 0)}:${String(Math.floor(t % 60)).padStart(2, '0')}）：0:45 花崗石牢點名前起身會被點到，石牢就不再固定（三顆石牢形成後再起）`); return true; }
     if (S.humans.has(slot)) {
@@ -2568,6 +3046,7 @@ function build(S) {
   shrink(83.0, 86.0, K.SHRINK2);
   at(88.0, () => {
     const k = R.gaol2Pick.find((x) => S.chars[x].alive);
+    if (k === undefined) return;   // 繼續打模式：MT 以外都倒地
     s.gaol2 = { slot: k, spot: [0, 0], pos: null, actor: null };
     R.gaol2Target = ROLES[k].key;
     S.mark(k, 'gaol', 88.0, 93.0);
@@ -2576,15 +3055,19 @@ function build(S) {
   });
   at(88.5, () => { const p = T2(S, [0, 6.2]); titan.moveTo(p[0], p[1], 3); });
   at(93.0, () => {
-    const g = s.gaol2, c = S.chars[g.slot];
+    const g = s.gaol2;
+    if (!g) return;
+    const c = S.chars[g.slot];
     g.pos = { x: c.pos.x, z: c.pos.z };
     if (!c.alive) return;
     c.stunUntil = 999; c.invulnUntil = 999; c.goal = null; S.addStatus(c.slot, 'gaol', null);
     c.stats.gaol2Ok = Math.hypot(c.pos.x, c.pos.z) <= K.GAOL_TOL;
   });
-  at(95.0, () => { const g = s.gaol2; g.actor = S.actor('gaol', '花崗石牢', g.pos.x, g.pos.z, 0); S.cast('花崗石牢', 'Granite Impact（花崗岩衝擊・覺醒）', 95.0, 5.5); S.log('花崗石牢出現：全員集火打掉'); });
+  at(95.0, () => { const g = s.gaol2; if (!g) return; g.actor = S.actor('gaol', '花崗石牢', g.pos.x, g.pos.z, 0); S.cast('花崗石牢', 'Granite Impact（花崗岩衝擊・覺醒）', 95.0, 5.5); S.log('花崗石牢出現：全員集火打掉'); });
   at(100.0, () => {
-    const g = s.gaol2, c = S.chars[g.slot];
+    const g = s.gaol2;
+    if (!g) return;
+    const c = S.chars[g.slot];
     S.despawn(g.actor);
     if (c.alive) { c.stunUntil = 0; c.invulnUntil = S.t + 0.3; S.removeStatus(c.slot, 'gaol'); }
     S.log('花崗石牢被擊破');
@@ -2610,7 +3093,8 @@ function build(S) {
   at(K.END, () => S.finishWith(s.woken, `泰坦沒有覺醒（${s.charges}/${K.CHARGES}）：花崗石牢沒有被爆破岩石連鎖炸開，泰坦位沒有污泥`));
 
   // ---------------------------------------------------------------- 走位
-  const MV = (t, id, title, spots, tip, frame, opt) => S.move(t, id, title, (S2) => sanitize(S2, spots(S2)), Object.assign({ tip: tipf(tip), frame }, opt || {}));
+  // 拉怪坦克倒地時另一位坦克接手站位（在修正安全點之前換）
+  const MV = (t, id, title, spots, tip, frame, opt) => S.move(t, id, title, (S2) => sanitize(S2, S2.swapTanks(spots(S2))), Object.assign({ tip: tipf(tip), frame, noSwap: true }, opt || {}));
   const A0 = (id, fix) => (S2) => { const a = fp(id); if (fix) fix(a); return a.map((p) => T0(S2, p)); };
   const A1 = (id, fix) => (S2) => { const a = fp(id); if (fix) fix(a, S2); return a.map((p) => T1(S2, p)); };
   const A2 = (id, fix) => (S2) => { const a = fp(id); if (fix) fix(a, S2); return a.map((p) => T2(S2, p)); };
@@ -2718,12 +3202,15 @@ function build(S) {
 function tick(S, dt) {
   const s = S.s, titan = s.titan;
   // 泰坦面向 MT（跳躍時除外）
-  if (s.faceMT && titan.visible && !titan.dead) { const m = S.chars[MT]; titan.rot = Math.atan2(m.pos.x - titan.pos.x, m.pos.z - titan.pos.z); }
+  if (s.faceMT && titan.visible && !titan.dead) { const m = S.mainTank(); titan.rot = Math.atan2(m.pos.x - titan.pos.x, m.pos.z - titan.pos.z); }
   for (const a of s.anim) if (S.t >= a.t0 && S.t <= a.t1 + dt) titan.lift = a.from + (a.to - a.from) * Math.min(1, (S.t - a.t0) / (a.t1 - a.t0));
   // 大怒震落點預覽（教學）
   if (s.kbPrev && S.t <= 43.0) {
     const d = Math.hypot(titan.pos.x, titan.pos.z) || 1;
-    for (const p of s.kbPrev) { const c = S.chars[p.owner]; p.x = c.pos.x - titan.pos.x / d * K.KB; p.z = c.pos.z - titan.pos.z / d * K.KB; }
+    for (const p of s.kbPrev) {
+      const c = S.chars[p.owner], k = S.hasStatus(c.slot, 'antikb') ? 0 : K.KB;   // 開防擊退：落點就是原地
+      p.x = c.pos.x - titan.pos.x / d * k; p.z = c.pos.z - titan.pos.z / d * k;
+    }
   }
   // 污泥：站在裡面太久會死
   for (const c of S.chars) {
@@ -2747,6 +3234,12 @@ function objectives(S, slot) {
     out.push({ ok: okRise, text: last ? '收到 C 的 10 秒復活就起身' : '三顆石牢形成後～開始踩地板前（0:50～0:55）起身' });
     out.push({ ok: c.alive, text: '起身後存活到最後' });
   } else out.push({ ok: c.alive, text: '全程存活' });
+  if (S.variant === 'suicide') {
+    for (const r of RAISES.filter((x) => x.by === k)) {
+      const dl = r.slot === RR ? RR_DEADLINE - 1 : RISE.win0;
+      out.push({ ok: st.raises.some((x) => x.slot === r.slot && x.t <= dl), text: `自殺流：${r.how}復活 ${ROLES[r.slot].key}（${r.slot === RR ? '踩地板期間完成' : '0:50 前'}）` });
+    }
+  }
   const g = s.gaol.find((x) => x.slot === k);
   if (g) out.push({ ok: !!st.gaolOk, text: `花崗石牢：照順序站「${g.name}」` });
   if (s.gaol2 && s.gaol2.slot === k) out.push({ ok: !!st.gaol2Ok, text: '覺醒後花崗石牢：站 1 號位' });
@@ -2823,6 +3316,7 @@ const ROLE_DESC_SUI = [
 
 PHASES.p3 = {
   id: 'p3', name: 'P3 泰坦', short: '泰坦', preRoll: -3, end: K.END, maxCharges: K.CHARGES, chargeLabel: '覺醒',
+  bossLook: 'titan', bossR: 5,
   checkpoints: CHECKPOINTS, cues: CUES, roleDesc: ROLE_DESC,
   cuesFor: (v) => (v === 'suicide' ? CUES.concat(CUES_SUI).sort((a, b) => a[0] - b[0]) : CUES),
   roleDescFor: (v) => (v === 'suicide' ? ROLE_DESC_SUI : ROLE_DESC),
@@ -3009,6 +3503,15 @@ class Sfx {
       case 'jump':       // 泰坦跳起：往上的風切聲
         this.noise(0.9, { filter: 'bandpass', freq: 300, freqTo: 2400, q: 0.9, vol: 0.18, attack: 0.3 });
         this.tone(90, 0.5, { vol: 0.15, slideTo: 40 });
+        break;
+      case 'skill': this.tone(1046, 0.07, { type: 'triangle', vol: 0.07 }); break;   // 自己用技能
+      case 'raised':     // 收到復活
+        [784, 988, 1319].forEach((f, i) => this.tone(f, 0.35, { type: 'sine', vol: 0.12, delay: i * 0.09 }));
+        break;
+      case 'lb':         // 極限技：上升的和弦＋重擊
+        [262, 330, 392, 523, 659].forEach((f, i) => this.tone(f, 0.6, { type: 'triangle', vol: 0.1, delay: i * 0.05 }));
+        this.noise(1.0, { filter: 'bandpass', freq: 400, freqTo: 3000, q: 0.8, vol: 0.16, attack: 0.2 });
+        this.tone(65, 0.9, { vol: 0.3, slideTo: 30, delay: 0.25 });
         break;
       default: break;
     }
@@ -4087,7 +4590,8 @@ class Renderer2D {
         const c = sim.chars[f.slot];
         if (o.solo && f.slot !== sim.playerSlot) continue;
         const age = t - f.t;
-        ctx.fillStyle = `rgba(255,130,115,${1 - age / 1.2})`;
+        const fa = 1 - age / 1.2;
+        ctx.fillStyle = f.lb ? `rgba(255,216,102,${fa})` : f.text === '中斷' ? `rgba(190,215,255,${fa})` : `rgba(255,130,115,${fa})`;
         const cp = this.ip(c);
         ctx.fillText(f.text, X(cp.x), Z(cp.z) - 1.8 * scale - age * 18);
       }
@@ -4292,6 +4796,13 @@ class Renderer2D {
       ctx.fillStyle = '#5a5f68'; ctx.beginPath(); ctx.arc(px, pz, r * 0.85, 0, PI * 2); ctx.fill();
       ctx.strokeStyle = '#ff6b5e'; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.moveTo(px - r * 0.6, pz - r * 0.6); ctx.lineTo(px + r * 0.6, pz + r * 0.6); ctx.moveTo(px + r * 0.6, pz - r * 0.6); ctx.lineTo(px - r * 0.6, pz + r * 0.6); ctx.stroke();
+      // 有人正在救／已收到復活：金色光圈與 ✚
+      const saving = sim.chars.some((x) => x.cast && x.cast.id === 'raise' && x.cast.tg === c.slot);
+      if ((c.raise || saving) && !o.mini) {
+        ctx.strokeStyle = `rgba(255,216,102,${c.raise ? 0.9 : 0.45 + 0.35 * Math.sin(tsec * 8)})`; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(px, pz, r + 4, 0, PI * 2); ctx.stroke();
+        if (c.raise) { ctx.fillStyle = '#ffd866'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText('✚', px, pz - r - 6); }
+      }
       ctx.globalAlpha = 1;
       return;
     }
@@ -4313,6 +4824,12 @@ class Renderer2D {
     if (o.mini) return;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(px - r, pz + r + 3, r * 2, 4);
     ctx.fillStyle = c.hp > 50 ? '#52d17c' : c.hp > 25 ? '#e6c84a' : '#e5584d'; ctx.fillRect(px - r, pz + r + 3, r * 2 * (c.hp / 100), 4);
+    // 讀條（藍：攻擊；金：復活）
+    if (c.cast) {
+      const k = c.cast, p = Math.max(0, Math.min(1, (sim.t - k.t0) / (k.t1 - k.t0)));
+      ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(px - r, pz + r + 9, r * 2, 4);
+      ctx.fillStyle = k.id === 'raise' ? '#ffd866' : '#7fc4ff'; ctx.fillRect(px - r, pz + r + 9, r * 2 * p, 4);
+    }
     // 狀態光環
     for (const s of sim.statusesOf(c)) {
       if (s.id === 'searing') { ctx.strokeStyle = `rgba(255,120,40,${0.6 + 0.3 * Math.sin(tsec * 8)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(px, pz, r + 3, 0, PI * 2); ctx.stroke(); }
@@ -4828,7 +5345,11 @@ class Renderer3D {
     m.group.add(ring, lab);
     this.scene.add(m.group);
     const blob = this.blob(0.6); this.scene.add(blob);
-    return { m, ring, lab, markers, blob, kbRef: null, kbT0: 0, kbDur: 1, deadT: -1, fallY: 0, spin: 0, walkSm: 0 };
+    // 讀條光圈（腳下，藍：攻擊、金：復活）與倒地者的「已收到復活」標記：放在場景上（倒地時角色群組會躺平）
+    const castRing = new T.Mesh(SH(new T.RingGeometry(0.95, 1.2, 48)), new T.MeshBasicMaterial({ color: 0x7fc4ff, side: T.DoubleSide, transparent: true, opacity: 0.8, depthWrite: false, blending: T.AdditiveBlending }));
+    castRing.rotation.x = -PI / 2; castRing.visible = false; this.scene.add(castRing);
+    const raiseMark = textSprite('✚ 復活', { fg: '#2a1d00', bg: '#ffd866', size: 34 }); raiseMark.visible = false; this.scene.add(raiseMark);
+    return { m, ring, lab, markers, blob, castRing, raiseMark, kbRef: null, kbT0: 0, kbDur: 1, deadT: -1, fallY: 0, spin: 0, walkSm: 0 };
   }
 
   makeActor(a) {
@@ -5174,7 +5695,7 @@ class Renderer3D {
       const ob = this.charObjs[i], g = ob.m.group;
       const show = !solo || c.slot === sim.playerSlot;
       g.visible = show;
-      if (!show) { ob.blob.visible = false; return; }
+      if (!show) { ob.blob.visible = false; ob.castRing.visible = false; ob.raiseMark.visible = false; return; }
       if (c.kb !== ob.kbRef) { ob.kbRef = c.kb; if (c.kb) { ob.kbT0 = t; ob.kbDur = Math.max(0.1, c.kb.until - t); } }
       let y = 0;
       if (c.kb || (t - ob.kbT0 < ob.kbDur && ob.kbRef === null && ob.kbT0 > 0)) {
@@ -5200,6 +5721,16 @@ class Renderer3D {
         g.rotation.set(-PI / 2 * k, c.rot, ob.spin);
         g.position.y += 0.25 * k;
       }
+      const k = c.alive ? c.cast : null;
+      ob.castRing.visible = !!k;
+      if (k) {
+        const p = Math.max(0, Math.min(1, (t - k.t0) / (k.t1 - k.t0))), sc = 0.55 + 0.45 * p;
+        ob.castRing.position.set(ip.x, 0.06, ip.z); ob.castRing.scale.set(sc, sc, 1);
+        ob.castRing.material.color.setHex(k.id === 'raise' ? 0xffd866 : 0x7fc4ff);
+        ob.castRing.material.opacity = 0.45 + 0.4 * Math.abs(Math.sin(tsec * 5));
+      }
+      ob.raiseMark.visible = !c.alive && !!c.raise;
+      if (ob.raiseMark.visible) ob.raiseMark.position.set(ip.x, 1.4 + Math.sin(tsec * 3) * 0.08, ip.z);
       ob.ring.visible = c.slot === sim.playerSlot && c.alive;
       if (ob.ring.visible) { const s = 1 + Math.sin(tsec * 4) * 0.06; ob.ring.scale.set(s, s, 1); }
       ob.lab.visible = c.alive && c.slot !== sim.playerSlot;   // 跟 FF14 預設一樣不顯示自己的名牌（鏡頭拉近時才不會擋到 Boss）
@@ -5429,7 +5960,7 @@ root.Renderer3D = Renderer3D;
    房主的瀏覽器跑模擬；隊員自己的角色在本機移動（含擊退、暈眩），位置送給房主；其他角色依快照內插顯示（約慢 0.1 秒）。 */
 (function (root) {
 'use strict';
-const { ROLES, PHASES, STATUS_DEF, C, angDiff } = root.UWU;
+const { ROLES, PHASES, STATUS_DEF, C, angDiff, SKILL_IDS } = root.UWU;
 const PI = Math.PI;
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -5453,7 +5984,7 @@ class Link {
 // ---------------------------------------------------------------- 房主：模擬 → 快照
 class Replicator {
   constructor() { this.reset(null); }
-  reset(sim) { this.sim = sim; this.sent = new WeakSet(); this.guideKey = {}; this.zid = new WeakMap(); this.zseq = 0; }
+  reset(sim) { this.sim = sim; this.sent = new WeakSet(); this.guideKey = {}; this.skillKey = {}; this.zid = new WeakMap(); this.zseq = 0; }
   zoneId(z) { if (!this.zid.has(z)) this.zid.set(z, ++this.zseq); return this.zid.get(z); }
   /** full＝把目前所有東西都送出（新進房或換新的一局）；否則只送新出現的東西。 */
   snapshot(sim, full) {
@@ -5473,9 +6004,12 @@ class Replicator {
       ch: S.chars.map((c) => {
         const kb = c.kb && S.t < c.kb.until ? c.kb : null;
         const flags = (c.alive ? 1 : 0) | (c.planned ? 2 : 0) | (c.raise ? 4 : 0) | (c.fell ? 8 : 0) | (c.searing ? 16 : 0) | (c.auto && !c.remote ? 32 : 0);
+        const k = c.cast;
         return [r2(c.pos.x), r2(c.pos.z), r3(c.rot), flags, Math.round(c.hp), kb ? kb.seq : 0, kb ? r2(kb.vx) : 0, kb ? r2(kb.vz) : 0, kb ? r3(kb.until) : 0,
-          r3(c.stunUntil), r2(c.walk), c.thermal, c.raise ? c.raise.by : -1, kb ? r3(kb.t0) : 0];
+          r3(c.stunUntil), r2(c.walk), c.thermal, c.raise ? c.raise.by : -1, kb ? r3(kb.t0) : 0,
+          k ? [SKILL_IDS.indexOf(k.id), r3(k.t0), r3(k.t1), k.tg] : 0];
       }),
+      lb: r2(S.lb), kg: S.keepGoing ? 1 : 0, sk: {},
       ac: S.actors.filter((a) => !a.dead).map((a) => [a.id, a.look, a.name, r2(a.pos.x), r2(a.pos.z), r3(a.rot), (a.visible ? 1 : 0) | (a.targetable === false ? 0 : 2) | (a.blue ? 4 : 0),
         r2(a.hp), r2(a.lift || 0), a.badge || 0, a.tint || '', a.hits || 0]),
       fx: take(S.fx).map((f) => pick(f, FX_KEYS)),
@@ -5490,6 +6024,11 @@ class Replicator {
     for (const slot of S.humans) {
       const g = S.guides[slot], key = JSON.stringify(g);
       if (full || this.guideKey[slot] !== key) { m.gd[slot] = g; this.guideKey[slot] = key; }
+      // 真人的技能冷卻（給他自己的技能列顯示）：有變才送
+      const c = S.chars[slot], cd = {};
+      for (const id of Object.keys(c.cd)) if (c.cd[id] > S.t) cd[id] = r3(c.cd[id]);
+      const sk = [r3(c.gcdUntil), cd, c.queued ? c.queued.id : 0], skKey = JSON.stringify(sk);
+      if (full || this.skillKey[slot] !== skKey) { m.sk[slot] = sk; this.skillKey[slot] = skKey; }
     }
     return m;
   }
@@ -5502,9 +6041,10 @@ class Mirror {
   constructor(pid, variant, mySlot, snap) {
     this.phase = PHASES[pid]; this.pid = pid; this.variant = variant; this.playerSlot = mySlot;
     this.t = snap.t; this.status = 'running'; this.failure = null; this.edgeR = C.EDGE_DEATH; this.shrink = null;
-    this.s = { charges: 0, woken: false };
+    this.s = { charges: 0, woken: false }; this.lb = 0; this.keepGoing = false;
     this.chars = ROLES.map((r) => ({ slot: r.slot, key: r.key, kind: r.kind, pos: { x: 0, z: 0 }, prev: { x: 0, z: 0 }, rot: PI, prevRot: PI,
-      alive: true, hp: 100, kb: null, fell: false, walk: 0, thermal: 0, searing: false, planned: false, raise: null, stunUntil: 0, auto: false }));
+      alive: true, hp: 100, kb: null, fell: false, walk: 0, thermal: 0, searing: false, planned: false, raise: null, stunUntil: 0, auto: false,
+      cast: null, gcdUntil: 0, cd: {}, queued: null }));
     this.actors = []; this.actorMap = new Map();
     this.fx = []; this.fxMap = new Map();
     this.casts = []; this.marks = []; this.feed = []; this.notes = []; this.floats = []; this.screenFx = []; this.sounds = [];
@@ -5533,7 +6073,8 @@ class Mirror {
     const me = this.playerSlot;
     this.base = { t: m.t, at: performance.now(), running };
     this.status = m.st; this.failure = m.fail; this.edgeR = m.er; this.shrink = m.sh;
-    this.s.charges = m.s[0]; this.s.woken = !!m.s[1];
+    this.s.charges = m.s[0]; this.s.woken = !!m.s[1]; this.lb = m.lb; this.keepGoing = !!m.kg;
+    for (const k of Object.keys(m.sk)) { const c = this.chars[k], d = m.sk[k]; c.gcdUntil = d[0]; c.cd = d[1]; c.queued = d[2] ? { id: d[2] } : null; }
     const frame = { t: m.t, ch: [], ac: new Map() };
     m.ch.forEach((d, i) => {
       const c = this.chars[i];
@@ -5544,6 +6085,7 @@ class Mirror {
       if (d[5]) { if (!c.kb || c.kb.seq !== d[5]) c.kb = { seq: d[5], vx: d[6], vz: d[7], until: d[8], t0: d[13] }; } else c.kb = null;
       c.stunUntil = d[9]; c.thermal = d[11];
       c.raise = d[3] & 4 ? { by: d[12] } : null;
+      c.cast = d[14] ? { id: SKILL_IDS[d[14][0]], t0: d[14][1], t1: d[14][2], tg: d[14][3] } : null;
       if (i !== me || c.auto || !c.alive) c.walk = d[10];
       c.host = { x: d[0], z: d[1], rot: d[2] };
       if (i === me && c.alive && !wasAlive) this.teleport = true;   // 復活：從屍體位置起身
@@ -5579,7 +6121,7 @@ class Mirror {
   /** 每幀：推進時鐘、內插其他角色與實體、清掉過期的東西。 */
   frame(now, dt) {
     const b = this.base;
-    const target = b.running ? b.t + (now - b.at) / 1000 : b.t;
+    const target = b.running ? b.t + Math.min(0.4, (now - b.at) / 1000) : b.t;   // 房主那邊停住（例如分頁在背景）就不要一直往前推
     if (!b.running || Math.abs(target - this.clock) > 0.3) this.clock = target;
     else this.clock += dt + (target - this.clock) * 0.1;
     this.t = this.clock;
@@ -5622,7 +6164,7 @@ root.UWU_NET = { Link, Replicator, Mirror };
 /* UI 控制：階段（含完整體驗）、模式、職位、起始點、輸入、HUD、音效、結算。 */
 (function () {
 'use strict';
-const { Sim, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR } = window.UWU;
+const { Sim, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR, SKILLS, LOADOUT, GCD, skillCheck, bossOf, meleeReach, raiseTarget } = window.UWU;
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;
 const PHASE_ORDER = ['p1', 'p2', 'p3'];  // 已完成的階段（依戰鬥順序）
@@ -5632,7 +6174,10 @@ const S = {
   pid: 'p1', mode: 'guide', party: 'multi', role: 0, view: '2d', viewTouched: false, cp: 0, speed: 1,
   phase: 'ready', seed: 0, sim: null, keys: new Set(), acc: 0, dismissed: false, p3v: 'regular',
   ci: 0, offset: 0, chainLog: [],
+  death: { solo: 'stop', net: 'continue' },   // 有人倒地時：單人預設立即重來、連線預設繼續打
+  target: null, held: null,                   // 復活目標（點隊伍列表）、按住的技能鍵
 };
+const deathMode = () => (netOn() ? S.death.net : S.death.solo);
 let r2d = null, r3d = null;
 const sfx = new window.Sfx();
 const stage = $('stage');
@@ -5702,6 +6247,17 @@ function buildSide() {
   const p3v = loadSetting(P3V_STORE, { v: 'regular' });
   S.p3v = p3v.v === 'suicide' ? 'suicide' : 'regular';
   seg('seg-p3v', (v) => { S.p3v = v; saveSetting(P3V_STORE, { v }); newRun(S.seed); });
+  const dm = loadSetting(DEATH_STORE, S.death);
+  S.death = { solo: dm.solo === 'continue' ? 'continue' : 'stop', net: dm.net === 'stop' ? 'stop' : 'continue' };
+  seg('seg-death', (v) => {
+    if (isGuest()) { syncSide(); return; }
+    S.death[netOn() ? 'net' : 'solo'] = v; saveSetting(DEATH_STORE, S.death);
+    // 打到一半切換：直接套用到這一局；還沒開始就重新建立
+    if (S.phase === 'running' || S.phase === 'paused') { S.sim.keepGoing = v === 'continue'; S.sim.stopOnDeath = v !== 'continue'; syncSide(); }
+    else newRun(S.seed);
+    if (isHost()) sendCfg();
+  });
+  $('b-giveup').addEventListener('click', (e) => { e.currentTarget.blur(); giveUp(); });
   $('raise').addEventListener('click', (e) => { e.currentTarget.blur(); acceptRaise(); });
 
   $('b-start').addEventListener('click', (e) => { e.currentTarget.blur(); startPause(); });
@@ -5714,6 +6270,7 @@ function buildSide() {
 }
 
 const P3V_STORE = 'uwu-trainer-p3v';
+const DEATH_STORE = 'uwu-trainer-death';
 // 3D 鏡頭限制：預設為 FF14 近似值，可調整並存在瀏覽器
 const CAM_DEFAULT = { maxDist: 20, fov: 45, maxPitchDeg: 80 };
 const CAM_STORE = 'uwu-trainer-cam';
@@ -5829,9 +6386,15 @@ function buildWaymarks() {
 function syncSide() {
   setSeg('seg-phase', S.pid);
   setSeg('seg-mode', S.mode);
+  const keep = deathMode() === 'continue';
   $('phasenote').textContent = fullMode()
-    ? `從 P1 開場一路打到 ${phaseTag(FULL_CHAIN[FULL_CHAIN.length - 1])} 結束，階段之間無縫銜接（跟遊戲一樣沒有倒數）；任何人死亡即失敗（自殺流的計畫倒地除外）。`
+    ? `從 P1 開場一路打到 ${phaseTag(FULL_CHAIN[FULL_CHAIN.length - 1])} 結束，階段之間無縫銜接（跟遊戲一樣沒有倒數）；${keep ? '倒地的人延續到下一階段，等人復活。' : '任何人死亡即失敗（自殺流的計畫倒地除外）。'}`
     : '「完整體驗」可從 P1 連續挑戰到 P3。';
+  setSeg('seg-death', deathMode());
+  $('deathnote').textContent = keep
+    ? '倒地的人可以被補師／C 復活（AI 補師也會救人），真人玩家全部倒地或按「放棄」才結束；沒覺醒也打到最後（結算標 ✗）。'
+    : '任何人死亡就失敗，馬上看結算重來（自殺流的計畫倒地除外）。';
+  $('app').classList.toggle('can-giveup', keep && !isGuest() && (S.phase === 'running' || S.phase === 'paused'));
   const p3on = S.pid === 'p3' || fullMode();
   $('p3vsec').classList.toggle('show', p3on);
   setSeg('seg-p3v', S.p3v);
@@ -5864,7 +6427,7 @@ function syncSide() {
   // 連線：隊員不能控制；連線時固定 1 倍速
   const lock = isGuest();
   for (const id of ['b-start', 'b-restart', 'b-new', 'cp']) $(id).disabled = lock;
-  document.querySelectorAll('#seg-phase button, #seg-p3v button').forEach((b) => { b.disabled = lock; });
+  document.querySelectorAll('#seg-phase button, #seg-p3v button, #seg-death button').forEach((b) => { b.disabled = lock; });
   if (netOn()) {
     $('speedsec').style.display = 'none';
     $('partynote').textContent = S.party === 'multi' ? '連線中：其他職位由隊友操作，沒人的職位由 AI 操作。' : '只顯示你自己（隊友照樣在打）。';
@@ -6008,7 +6571,7 @@ function hostRosterChanged() {
   sendCfg();
   if (fresh.length) { sendTick(); for (const id of fresh) sendFull(id); }
 }
-const cfgMsg = () => ({ t: 'cfg', pid: S.pid, ci: S.ci, cp: S.cp, seed: S.seed, p3v: S.p3v, roles: N.roles, wm: wm.list });
+const cfgMsg = () => ({ t: 'cfg', pid: S.pid, ci: S.ci, cp: S.cp, seed: S.seed, p3v: S.p3v, death: deathMode(), roles: N.roles, wm: wm.list });
 function sendCfg() { N.link.send(cfgMsg()); }
 function sendFull(to) {
   const m = { t: 'full', ep: N.ep, ph: S.phase, off: S.offset, pid: curPid(), ci: S.ci, variant: S.sim.variant, cfg: cfgMsg(), snap: N.rep.snapshot(S.sim, true) };
@@ -6036,7 +6599,12 @@ function hostMessage(m) {
   if (m.t === 'me') { if (slot !== undefined && S.sim.chars[slot].remote) S.sim.setRemote(slot, m.x, m.z, m.r); return; }
   if (m.t === 'act') {
     if (slot === undefined) return;
-    if (m.a === 'raise' && S.phase === 'running' && S.sim.s.accept) S.sim.s.accept(slot);
+    if (m.a === 'raise' && S.phase === 'running') S.sim.acceptRaise(slot);
+    if (m.a === 'skill' && S.phase === 'running' && SKILLS[m.id]) {
+      const c = S.sim.chars[slot];
+      if (c.remote && m.x !== undefined) c.net = { x: m.x, z: m.z, rot: m.r };   // 按技能時的位置（不算移動）
+      S.sim.useSkill(slot, m.id, m.tg);
+    }
     if (m.a === 'auto') S.sim.setRemoteAuto(slot, !!m.on);
     return;
   }
@@ -6071,7 +6639,7 @@ function applyCfg(c) {
   N.cfg = c; N.roles = c.roles;
   const mine = N.roles[N.me];
   const roleChanged = mine !== undefined && mine !== S.role;
-  S.pid = c.pid; S.ci = c.ci; S.cp = c.cp; S.seed = c.seed; S.p3v = c.p3v;
+  S.pid = c.pid; S.ci = c.ci; S.cp = c.cp; S.seed = c.seed; S.p3v = c.p3v; S.death.net = c.death;
   if (mine !== undefined) S.role = mine;
   if (JSON.stringify(c.wm) !== JSON.stringify(wm.list)) applyWaymarks(c.wm);
   rebuildCp();
@@ -6116,7 +6684,8 @@ function guestTick(now, dt) {
     if (N.kb && N.kb.left > 0) { me.pos.x += N.kb.vx * STEP; me.pos.z += N.kb.vz * STEP; N.kb.left -= STEP; }
     else if (mir.t >= me.stunUntil) {
       const inp = readInput(), l = Math.hypot(inp.x, inp.z);
-      if (l > 0.01) { me.pos.x += inp.x * C.SPEED * STEP; me.pos.z += inp.z * C.SPEED * STEP; me.rot = Math.atan2(inp.x, inp.z); }
+      const v = C.SPEED * (mir.statuses.some((x) => x.slot === me.slot && x.id === 'sprint' && (x.t1 === null || mir.t <= x.t1)) ? 1.3 : 1);   // 衝刺
+      if (l > 0.01) { me.pos.x += inp.x * v * STEP; me.pos.z += inp.z * v * STEP; me.rot = Math.atan2(inp.x, inp.z); }
     }
     me.walk = Math.hypot(me.pos.x - x0, me.pos.z - z0) / STEP;
     N.acc -= STEP;
@@ -6190,7 +6759,7 @@ function syncNet() {
 
 // ------------------------------------------------------------------ run control
 function makeSim(pid, extra) {
-  return new Sim(Object.assign({ phase: pid, seed: phaseSeed(pid), playerSlot: S.role, stopOnDeath: true, variant: pid === 'p3' ? S.p3v : null,
+  return new Sim(Object.assign({ phase: pid, seed: phaseSeed(pid), playerSlot: S.role, stopOnDeath: true, onDeath: deathMode(), variant: pid === 'p3' ? S.p3v : null,
     remote: isHost() ? remoteSlots() : [] }, extra || {}));
 }
 function newRun(seed) {
@@ -6211,6 +6780,7 @@ function phaseRecord(sim, slot) {
   return {
     name: sim.phase.name, objectives: sim.objectives(slot), roll: sim.phase.rollSummary(sim.roll),
     hits: sim.notes.filter((n) => n.type === 'hit' && n.slot === slot).slice(0, 6),
+    skills: sim.skillSummary(slot),
   };
 }
 /** 本階段每位真人的檢查（連線時每個人看自己的）。 */
@@ -6221,7 +6791,12 @@ function advanceChain() {
   S.chainLog.push(phaseRecords(prev));
   S.offset += prev.t;
   S.ci++;
-  S.sim = makeSim(curPid(), { startPos: prev.chars.map((c) => [c.pos.x, c.pos.z]), preRoll: 0 });
+  // 位置、倒地者、極限技量表、技能冷卻都延續到下一階段
+  S.sim = makeSim(curPid(), {
+    startPos: prev.chars.map((c) => [c.pos.x, c.pos.z]), preRoll: 0,
+    dead: prev.chars.filter((c) => !c.alive).map((c) => c.slot), lb: prev.lb,
+    carry: prev.chars.map((c) => { const o = {}; for (const k of Object.keys(c.cd)) if (c.cd[k] > prev.t) o[k] = c.cd[k] - prev.t; return o; }),
+  });
   if (prev.pc.auto) S.sim.setPlayerAuto(true);
   for (const slot of remoteSlots()) if (prev.chars[slot].auto) S.sim.setRemoteAuto(slot, true);   // 開著 AI 代打的隊員維持 AI
   audioReset();
@@ -6238,12 +6813,66 @@ function startPause() {
   syncSide();
   if (isHost()) sendTick();
 }
-/** 自殺流：接受復活（倒地且收到復活時）。 */
+/** 接受復活（倒地且收到復活時）。 */
 function acceptRaise() {
   const sim = S.sim;
   if (S.phase !== 'running' || sim.pc.alive || !sim.pc.raise) return;
   if (isGuest()) { N.link.send({ t: 'act', a: 'raise' }); return; }
-  if (sim.s.accept) sim.s.accept(sim.pc.slot);
+  sim.acceptRaise(sim.pc.slot);
+}
+/** 放棄這一局（房主／單人）：直接看結算。 */
+function giveUp() {
+  if (!hostOk() || !S.sim || !(S.phase === 'running' || S.phase === 'paused')) return;
+  S.sim.giveUp();
+  S.phase = 'ended'; syncSide(); showResult();
+}
+// ---------------- 技能
+const hot = { slots: [], castKey: '', lbKey: '', sendT: {} };
+function buildHotbar() {
+  const box = $('slots'); box.innerHTML = ''; hot.slots = [];
+  LOADOUT[S.role].forEach((id, i) => {
+    const sk = SKILLS[id];
+    const b = document.createElement('button');
+    b.className = 'sk' + (sk.gcd ? ' gcd' : '') + (sk.lb ? ' lbk' : '');
+    b.innerHTML = `<span class="kb">${i + 1}</span>${sk.short}<i class="cd"></i><span class="ct"></span>`;
+    b.title = `${sk.name}（${i + 1}）：${sk.tip}`;
+    b.addEventListener('click', (e) => { e.currentTarget.blur(); trySkill(id, true); });
+    box.appendChild(b);
+    hot.slots.push({ id, el: b, cd: b.querySelector('.cd'), ct: b.querySelector('.ct'), key: '' });
+  });
+  hot.castKey = ''; hot.lbKey = '';
+}
+/** 使用技能。fresh：這次是按下（不是按住重複），失敗時才跳提示。 */
+function trySkill(id, fresh) {
+  sfx.unlock();
+  const sim = S.sim;
+  if (!sim || S.phase !== 'running') { if (fresh) toast(S.phase === 'paused' ? '暫停中' : '還沒開始'); return; }
+  if (isGuest()) {
+    if (N.spectate) return;
+    const chk = skillCheck(sim, sim.playerSlot, id, S.target);
+    if (chk.why === undefined || (chk.gcdWait !== undefined && chk.gcdWait <= 0.15)) {
+      const now = performance.now();
+      if (now - (hot.sendT[id] || 0) < 200) return;   // 按住時不要一直送
+      hot.sendT[id] = now;
+      // 連同目前位置一起送：剛停下來就讀條時，房主不會把「最後一次位置更新」誤判成讀條中移動
+      const me = sim.pc, x = Math.round(me.pos.x * 100) / 100, z = Math.round(me.pos.z * 100) / 100, r = Math.round(me.rot * 1000) / 1000;
+      N.link.send({ t: 'act', a: 'skill', id, tg: S.target, x, z, r });
+      N.sentMe = x + ',' + z + ',' + r;
+      if (chk.why === undefined) skillFlash(id);
+    } else if (fresh && chk.why) toast(chk.why);
+    return;
+  }
+  const r = sim.useSkill(sim.playerSlot, id, S.target);
+  if (r.why === undefined) { if (!r.queued) skillFlash(id); } else if (fresh && r.why) toast(r.why);
+}
+function skillFlash(id) {
+  const s = hot.slots.find((x) => x.id === id);
+  if (s) { s.el.classList.remove('fl'); void s.el.offsetWidth; s.el.classList.add('fl'); }
+  sfx.play('skill');
+}
+function setTarget(slot) {
+  S.target = S.target === slot ? null : slot;
+  partyRows.forEach((row, i) => { if (row) row.el.classList.toggle('tg', i === S.target); });
 }
 function toggleDemo() {
   if (!S.sim || S.phase === 'ended') return;
@@ -6301,7 +6930,9 @@ function audioTick() {
     au.marks.add(m);
     if (m.slot === me) sfx.play('markMe'); else if (!solo) sfx.play('mark');
   }
-  for (const f of sim.screenFx) if (!au.screen.has(f)) { au.screen.add(f); sfx.play('raidwide', f.power); }
+  for (const f of sim.screenFx) if (!au.screen.has(f)) { au.screen.add(f); sfx.play(f.type === 'lb' ? 'lb' : 'raidwide', f.power); }
+  if (!sim.pc.alive && sim.pc.raise && !au.raised) sfx.play('raised');
+  au.raised = !sim.pc.alive && !!sim.pc.raise;
   for (const f of sim.sounds) if (!au.sounds.has(f)) { au.sounds.add(f); sfx.play(f.name); }
   sim.chars.forEach((c, i) => {
     if (au.alive[i] && !c.alive) { if (i === me) sfx.play('deathMe'); else if (!solo) sfx.play('death'); if (c.kb) sfx.play('knock'); }
@@ -6321,10 +6952,16 @@ function buildParty() {
     if (r.slot === S.role) { partyRows.push(null); return; }
     const d = document.createElement('div'); d.className = 'pm';
     const owner = netOn() ? slotOwner(r.slot) : null;
-    d.innerHTML = `<span class="k" style="background:${r.color}">${r.key}</span><span class="hp"><i></i></span><span class="st"></span>` + (netOn() ? `<span class="who${owner ? '' : ' ai'}">${owner ? escapeHtml(memberName(owner)) : 'AI'}</span>` : '');
+    d.innerHTML = `<span class="k" style="background:${r.color}">${r.key}</span><span class="hp"><i></i></span><span class="st"></span>` + (netOn() ? `<span class="who${owner ? '' : ' ai'}">${owner ? escapeHtml(memberName(owner)) : 'AI'}</span>` : '')
+      + '<span class="cb"><i></i></span>';
+    d.title = '點一下選為目標（復活用），再點一次取消';
+    d.addEventListener('click', () => setTarget(r.slot));
+    if (S.target === r.slot) d.classList.add('tg');
     box.appendChild(d);
-    partyRows.push({ el: d, hp: d.querySelector('.hp i'), st: d.querySelector('.st'), html: null, dead: null, hw: '', hc: null });
+    partyRows.push({ el: d, hp: d.querySelector('.hp i'), st: d.querySelector('.st'), cb: d.querySelector('.cb'), cbi: d.querySelector('.cb i'), cbKey: '', html: null, dead: null, hw: '', hc: null });
   });
+  if (S.target === S.role) S.target = null;
+  buildHotbar();
   const me = ROLES[S.role];
   $('me-key').textContent = me.key; $('me-key').style.background = me.color;
   $('me-name').textContent = me.name;
@@ -6347,6 +6984,51 @@ function myStatusHtml(list, t) {
     const rem = remText(s, t);
     return `<div class="msi${d.mark ? ' mk' : ''}" style="--c:${d.color}"><b>${d.icon}${s.stacks ? `<em>${s.stacks}</em>` : ''}</b><span>${d.name}${s.stacks ? ` ×${s.stacks}` : ''}</span><small>${rem ? rem + ' 秒' : '持續中'}</small></div>`;
   }).join('');
+}
+
+/** 隊伍列表裡倒地者的狀態：陣亡／誰正在救／已收到復活。 */
+function deadHtml(sim, c) {
+  if (c.raise) return `<span class="rz">已收到復活（${ROLES[c.raise.by].key}）</span>`;
+  const r = sim.chars.find((x) => x.cast && x.cast.id === 'raise' && x.cast.tg === c.slot);
+  if (r) return `<span class="rz">${r.key} 復活中…</span>`;
+  return `<span class="dead-x">${c.planned ? '倒地' : '陣亡'}</span>`;
+}
+/** 技能列：冷卻、GCD、不能用（倒地、距離太遠、沒有目標）、排隊中；自己的讀條；極限技量表。 */
+function updateHotbar(sim) {
+  const pc = sim.pc, t = sim.t, run = S.phase === 'running' && t >= 0;
+  const b = bossOf(sim), far = !b || Math.hypot(b.pos.x - pc.pos.x, b.pos.z - pc.pos.z) > meleeReach(sim);
+  const blocked = !pc.alive || t < pc.stunUntil;
+  for (const sl of hot.slots) {
+    const sk = SKILLS[sl.id];
+    let p = 0, txt = '';
+    if (sk.gcd) { const rem = pc.gcdUntil - t; if (rem > 0 && run) p = Math.min(1, rem / GCD); }
+    else if (!sk.lb && pc.cd[sl.id] !== undefined) { const rem = pc.cd[sl.id] - t; if (rem > 0) { p = rem / sk.cd; txt = String(Math.ceil(rem)); } }
+    const off = !run || blocked || (sk.lb && sim.lb < 1) || (sk.melee && far) || (sk.gcd && !sk.raise && !b) || (sk.raise && !raiseTarget(sim, pc, S.target));
+    const q = !!(pc.queued && pc.queued.id === sl.id);
+    const key = `${p.toFixed(2)}|${txt}|${off}|${q}`;
+    if (key === sl.key) continue;
+    sl.key = key;
+    sl.cd.style.setProperty('--p', p.toFixed(3)); sl.ct.textContent = txt;
+    sl.el.classList.toggle('off', off); sl.el.classList.toggle('q', q);
+  }
+  const k = pc.cast, ck = k ? `${k.id}|${k.tg}|${Math.min(1, (t - k.t0) / (k.t1 - k.t0)).toFixed(3)}` : '';
+  if (ck !== hot.castKey) {
+    const el = $('mycast');
+    el.classList.toggle('show', !!k); el.classList.toggle('raise', !!k && k.id === 'raise');
+    if (k) {
+      $('mycast-nm').textContent = SKILLS[k.id].name + (k.id === 'raise' && k.tg >= 0 ? ` → ${ROLES[k.tg].key}` : '') + `　${Math.max(0, k.t1 - t).toFixed(1)}`;
+      $('mycast-bar').style.width = (Math.min(1, (t - k.t0) / (k.t1 - k.t0)) * 100).toFixed(1) + '%';
+    }
+    hot.castKey = ck;
+  }
+  const lk = sim.lb.toFixed(2);
+  if (lk !== hot.lbKey) {
+    $('lbbar').querySelectorAll('i').forEach((el, i) => {
+      const f = Math.max(0, Math.min(1, sim.lb - i));
+      el.firstChild.style.width = (f * 100).toFixed(0) + '%'; el.classList.toggle('full', f >= 1);
+    });
+    hot.lbKey = lk;
+  }
 }
 
 let lastCastHtml = '', lastFeedHtml = '', lastNextHtml = '', lastMyHtml = '', lastBanner = '', lastFlash = null;
@@ -6384,12 +7066,14 @@ function updateHud() {
   if (mw !== hud.meHw) { $('me-hp').style.width = mw; hud.meHw = mw; }
   if (mc !== hud.meHc) { $('me-hp').style.background = mc; hud.meHc = mc; }
   const meSt = pc.alive ? 'a' : pc.planned ? 'p' : 'd';
-  if (meSt !== hud.me) { $('me').classList.toggle('dead', !pc.alive); $('me-name').textContent = ROLES[pc.slot].name + (pc.alive ? '' : pc.planned ? '（倒地・等復活）' : '（陣亡）'); hud.me = meSt; }
-  // 自殺流：接受復活按鈕
+  if (meSt !== hud.me) { $('me').classList.toggle('dead', !pc.alive); $('me-name').textContent = ROLES[pc.slot].name + (pc.alive ? '' : pc.planned || sim.keepGoing ? '（倒地・等復活）' : '（陣亡）'); hud.me = meSt; }
+  // 接受復活按鈕（自殺流的計畫倒地另外提示起身時機）
   const canRaise = S.phase === 'running' && !pc.alive && !!pc.raise;
-  const rh = canRaise ? (pc.slot === 6 && sim.t > 60 ? '收到 C 的復活：馬上起身' : sim.t < 50.2 ? '先別起身：等三顆石牢形成（0:50 之後）' : sim.t <= 55.5 ? '現在可以起身（三牢已形成，踩地板前）' : '踩地板開始了，盡快起身') : '';
+  const rh = !canRaise ? '' : !pc.planned ? `${ROLES[pc.raise.by].key} 復活了你：起身後 5 秒無敵`
+    : pc.slot === 6 && sim.t > 60 ? '收到 C 的復活：馬上起身' : sim.t < 50.2 ? '先別起身：等三顆石牢形成（0:50 之後）' : sim.t <= 55.5 ? '現在可以起身（三牢已形成，踩地板前）' : '踩地板開始了，盡快起身';
   if (canRaise !== hud.raise) { $('raise').classList.toggle('show', canRaise); hud.raise = canRaise; }
-  if (rh !== hud.raiseHint) { $('raise-hint').textContent = S.mode === 'guide' ? rh : ''; hud.raiseHint = rh; }
+  if (rh !== hud.raiseHint) { $('raise-hint').textContent = S.mode === 'guide' || !pc.planned ? rh : ''; hud.raiseHint = rh; }
+  updateHotbar(sim);
   const my = pc.alive ? myStatusHtml(sim.statusesOf(pc), sim.t) : '';
   if (my !== lastMyHtml) { $('mystatus').innerHTML = my; lastMyHtml = my; }
   // 隊友
@@ -6400,8 +7084,14 @@ function updateHud() {
     const hw = (c.alive ? Math.round(c.hp) : 0) + '%', hc = c.hp > 50 ? '' : c.hp > 25 ? '#e6c84a' : '#e5584d';
     if (hw !== row.hw) { row.hp.style.width = hw; row.hw = hw; }
     if (hc !== row.hc) { row.hp.style.background = hc; row.hc = hc; }
-    const html = c.alive ? statusIcons(sim.statusesOf(c), sim.t) : `<span class="dead-x">${c.planned ? (c.raise ? '倒地・已收到復活' : '倒地') : '陣亡'}</span>`;
+    const html = c.alive ? statusIcons(sim.statusesOf(c), sim.t) : deadHtml(sim, c);
     if (html !== row.html) { row.st.innerHTML = html; row.html = html; }
+    const k = c.cast, ck = k ? `${k.id}|${Math.min(1, (sim.t - k.t0) / (k.t1 - k.t0)).toFixed(2)}` : '';
+    if (ck !== row.cbKey) {
+      row.cb.classList.toggle('on', !!k); row.cb.classList.toggle('raise', !!k && k.id === 'raise');
+      if (k) row.cbi.style.width = (Math.min(1, (sim.t - k.t0) / (k.t1 - k.t0)) * 100).toFixed(0) + '%';
+      row.cbKey = ck;
+    }
   });
 
   let ch_html = '';
@@ -6417,16 +7107,20 @@ function updateHud() {
   const fh = lines.map((f) => `<div class="${f.slot === sim.playerSlot ? 'me' : ''}${/死亡/.test(f.text) ? ' bad' : ''}">${f.text}</div>`).join('');
   if (fh !== lastFeedHtml) { $('feed').innerHTML = fh; lastFeedHtml = fh; }
 
-  if (assist) {
+  if (assist || !pc.alive) {
     const cur = sim.guide.cur, pc = sim.pc;
-    if (!pc.alive && pc.planned) {   // 自殺流倒地中
+    if (!pc.alive && !pc.planned) {   // 繼續打：倒地等復活
+      $('g-title').textContent = sim.keepGoing ? '倒地：等待復活' : '陣亡';
+      $('g-tip').textContent = !sim.keepGoing ? '' : pc.raise ? `${ROLES[pc.raise.by].key} 已經復活你：按 F（或畫面上的按鈕）起身，起身後 5 秒無敵，先回到自己的位置。`
+        : '等補師／C 復活你（AI 補師會自動救人）。可以看看隊友的處理。';
+    } else if (!pc.alive && pc.planned) {   // 自殺流倒地中
       $('g-title').textContent = '倒地（照自殺流）：等待復活';
       $('g-tip').textContent = pc.raise
         ? `${ROLES[pc.raise.by].key} 已經復活你。${pc.slot === 6 ? '收到就按 F 起身，回到人群。' : '三顆石牢形成後（0:50）～開始踩地板前（0:55）按 F 起身，起身後先普通移動到泰坦旁集合。'}`
         : '照分配等隊友復活（H1→OT、H2→M1、C→M2、C 10 秒詠唱→R）；收到後先別起身。';
     } else {
       $('g-title').textContent = cur ? `${cur.title}${cur.frame ? '（攻略 ' + cur.frame + '）' : ''}` : '準備';
-      $('g-tip').textContent = cur ? (cur.tip || '') : '按 Space 開始。黃色虛線圈是建議站位。';
+      $('g-tip').textContent = cur ? (cur.tip || '') : '按 Space 開始。黃色虛線圈是建議站位；1～7 使用技能。';
     }
     let nh = '';
     const nx = sim.guide.next;
@@ -6452,8 +7146,25 @@ function updateHud() {
   if (bh !== lastBanner) { $('banner').innerHTML = bh; lastBanner = bh; }
 }
 
+/** 結算的技能區：GCD 使用率、死刑／大範圍攻擊的減傷時機、倒地與復活、極限技。 */
+function skillHtml(k) {
+  const li = [];
+  const cnt = (a) => a.filter((x) => x.ok).length;
+  if (k.uptime !== null) li.push(`<li class="info">GCD 使用率 ${k.uptime}%${k.interrupts ? `（讀條被打斷 ${k.interrupts} 次）` : ''}</li>`);
+  else if (k.interrupts) li.push(`<li class="info">讀條被打斷 ${k.interrupts} 次</li>`);
+  if (k.busters.length) {
+    const miss = k.busters.filter((x) => !x.ok).map((x) => `${fmtTime(x.t)} ${x.name.replace(/（.*/, '')}`);
+    li.push(`<li class="${miss.length ? 'no' : ''}">死刑有開減傷／無敵：${cnt(k.busters)}/${k.busters.length}${miss.length ? `（沒開：${miss.join('、')}）` : ''}</li>`);
+  }
+  if (k.raids.length) li.push(`<li class="info">大範圍攻擊有團隊減傷覆蓋（全隊）：${cnt(k.raids)}/${k.raids.length}</li>`);
+  if (k.deaths) li.push(`<li class="no">倒地 ${k.deaths} 次${k.raisedBy.length ? '，被 ' + k.raisedBy.map((r) => `${r.lb ? r.by + ' 的 LB3' : r.by}（${fmtTime(r.t)}）`).join('、') + ' 救起' : ''}</li>`);
+  if (k.raises.length) li.push(`<li class="info">復活了 ${k.raises.map((r) => `${r.who}（${fmtTime(r.t)}）`).join('、')}</li>`);
+  if (k.lb) li.push(`<li class="info">使用極限技 ${k.lb} 次</li>`);
+  return li.length ? '<h5>技能</h5><ul>' + li.join('') + '</ul>' : '';
+}
 function recordHtml(rec, rl, heading) {
   let h = `<h5>${heading}</h5><ul>` + rec.objectives.map((o) => `<li class="${o.ok ? '' : 'no'}">${o.text}</li>`).join('') + '</ul>';
+  if (rec.skills) h += skillHtml(rec.skills);
   if (rec.hits.length) h += '<h5>受到的傷害／失誤</h5><ul>' + rec.hits.map((n) => `<li class="no">${fmtTime(n.t)}　${n.text}</li>`).join('') + '</ul>';
   h += '<h5>本局隨機</h5><p class="note">' + rec.roll.join('<br>') + '</p>';
   return h;
@@ -6462,8 +7173,10 @@ function recordHtml(rec, rl, heading) {
 function resultHtml(r, slot) {
   const rl = ROLES[slot];
   let h;
-  if (r.full) h = `<h2 class="${r.ok ? 'ok' : 'bad'}">${r.ok ? `完整體驗通過（${FULL_CHAIN.map(phaseTag).join('→')}）` : `失敗：${r.phaseName}`}</h2><p class="note">總時間 ${fmtTime(r.total)}</p>`;
-  else h = `<h2 class="${r.ok ? 'ok' : 'bad'}">${r.ok ? `成功：${r.phaseName} 通過` : '失敗'}</h2>`;
+  const deaths = r.recs.reduce((n, x) => n + (x.skills ? x.skills.deaths : 0), 0);
+  const dn = r.ok && deaths ? `（你倒地 ${deaths} 次）` : '';
+  if (r.full) h = `<h2 class="${r.ok ? 'ok' : 'bad'}">${r.ok ? `完整體驗通過${dn}（${FULL_CHAIN.map(phaseTag).join('→')}）` : `失敗：${r.phaseName}`}</h2><p class="note">總時間 ${fmtTime(r.total)}</p>`;
+  else h = `<h2 class="${r.ok ? 'ok' : 'bad'}">${r.ok ? `成功：${r.phaseName} 通過${dn}` : '失敗'}</h2>`;
   if (!r.ok && r.fail) {
     const f = r.fail, who = f.slot < 0 ? '隊伍' : (f.slot === slot ? '你（' + rl.key + '）' : '隊友 ' + ROLES[f.slot].key + (netOn() && slotOwner(f.slot) ? `（${escapeHtml(memberName(slotOwner(f.slot)))}）` : ''));
     h += `<p class="why">${r.full ? phaseTag(r.pid) + ' ' : ''}${fmtTime(Math.max(0, f.t))}・${who}：${f.cause}</p>`;
@@ -6516,6 +7229,7 @@ function meterFps(now, rawDt) {
 function tick(now) {
   meterFps(now, now - last);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (S.held) trySkill(S.held, false);   // 按住 GCD 鍵：冷卻快好時自動排隊
   if (isGuest()) { guestTick(now, dt); audioTick(); }
   else if (S.phase === 'running' && !document.hidden) {
     S.acc = Math.min(0.25, S.acc + dt * (S.mode === 'guide' && !netOn() ? S.speed : 1));   // 連線時固定 1 倍速
@@ -6557,9 +7271,20 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'p') toggleDemo();
   else if (k === 'h') togglePanel();
   else if (k === 'f') acceptRaise();
+  else if (k === 'g') giveUp();
+  else if (/^[1-9]$/.test(k) && +k <= LOADOUT[S.role].length) {   // 技能列
+    e.preventDefault();
+    const id = LOADOUT[S.role][+k - 1];
+    if (!e.repeat) trySkill(id, true);
+    S.held = SKILLS[id].gcd ? id : null;
+  }
 });
-window.addEventListener('keyup', (e) => { S.keys.delete(e.key.toLowerCase()); if (e.key === ' ') e.preventDefault(); });
-window.addEventListener('blur', () => S.keys.clear());
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  S.keys.delete(k); if (e.key === ' ') e.preventDefault();
+  if (/^[1-9]$/.test(k)) S.held = null;
+});
+window.addEventListener('blur', () => { S.keys.clear(); S.held = null; });
 window.addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
 
 // 放標點：點 2D 地圖／小地圖／3D 地面（攔在轉鏡頭之前）
@@ -6615,7 +7340,7 @@ syncSide();
 resizeAll();
 requestAnimationFrame(frame);
 
-window.__uwu = { S, N, netConnect, netLeave, wm, setWmTool, useWmTool, acceptRaise, tick, newRun, setView, startPause, toggleDemo, rebuildCp, advanceChain, sfx, get sim() { return S.sim; }, get r3d() { return r3d; }, get r2d() { return r2d; }, readInput };
+window.__uwu = { S, N, netConnect, netLeave, wm, setWmTool, useWmTool, acceptRaise, trySkill, setTarget, giveUp, tick, newRun, setView, startPause, toggleDemo, rebuildCp, advanceChain, sfx, get sim() { return S.sim; }, get r3d() { return r3d; }, get r2d() { return r2d; }, readInput };
 })();
 
 </script>

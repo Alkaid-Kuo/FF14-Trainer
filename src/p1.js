@@ -104,30 +104,32 @@ function setup(S) {
 function build(S) {
   const R = S.roll, s = S.s, at = (t, fn) => S.at(t, fn);
   const g = s.garuda;
-  const mtc = () => S.chars[MT];
+  const mtc = () => S.mainTank();   // MT 倒地時 Garuda 改面向 OT（再來依仇恨順序）
   const faceMT = () => { g.rot = Math.atan2(mtc().pos.x - g.pos.x, mtc().pos.z - g.pos.z); };
   s.gw = {}; s.rains = []; s.charges = 0; s.woken = false; s.plumes = []; s.shard = null; s.bubble = null; s.clones = [];
   const SONG = { intercept: 59, behind: 15 };
 
   // ---------------------------------------------------------------- 機制
   const slipstream = (t0, quiet) => S.hazard({
-    t0, tRes: t0 + 2.49, kind: 'cone', label: 'Slipstream（螺旋氣流）', tankSafe: true, tankDmg: 60, quiet,
+    t0, tRes: t0 + 2.49, kind: 'cone', label: 'Slipstream（螺旋氣流）', tankSafe: true, tankDmg: 60, quiet, buster: true,
     geom: () => { faceMT(); return { x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }; },
     castBy: ['Garuda', 'Slipstream', 2.2],
     killMsg: '被 Slipstream（Garuda 正面扇形）擊中：非坦克不能站正面',
   });
 
-  const downburst = (tRes) => S.hazard({
-    t0: tRes - 4.5, omen: tRes - 2.5, assistFrom: tRes - 4.5, tRes, kind: 'cone', label: 'Downburst（下行突風）', tankSafe: true, tankDmg: 45,
-    geom: () => ({ x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }),
-    follow: (f) => { f.x = g.pos.x; f.z = g.pos.z; f.rot = Math.atan2(mtc().pos.x - g.pos.x, mtc().pos.z - g.pos.z); },
+  // 扇形的對象在讀條開始時就鎖定（讀條中 MT 倒地也不會轉向別人）
+  const downburst = (tRes) => { let tg = null; return S.hazard({
+    t0: tRes - 4.5, omen: tRes - 2.5, assistFrom: tRes - 4.5, tRes, kind: 'cone', label: 'Downburst（下行突風）', tankSafe: true, tankDmg: 45, buster: true,
+    geom: () => { tg = mtc(); return { x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }; },
+    follow: (f) => { f.x = g.pos.x; f.z = g.pos.z; f.rot = Math.atan2(tg.pos.x - g.pos.x, tg.pos.z - g.pos.z); },
     killMsg: '被 Downburst 扇形（Garuda→MT 方向）擊中',
-  });
+  }); };
 
-  const song = (srcFn, targetSlot, tMark, tShow, tRes, spotKey, label) => {
-    let fx = null, src = null;
+  const song = (srcFn, slot0, tMark, tShow, tRes, spotKey, label) => {
+    let fx = null, src = null, targetSlot = slot0;
     at(tMark, () => {
       src = srcFn();
+      targetSlot = S.pickAlive(slot0);   // 預定的人倒地 → 點下一個活著的非坦克
       S.mark(targetSlot, 'song', tMark, tRes);
       fx = S.addFx({ kind: 'rect', x: src.pos.x, z: src.pos.z, w: K.SONG_HALF * 2, len: K.SONG_LEN, t0: tShow, assistFrom: tMark, t1: tRes, label, tint: 'line' });
       fx.follow = (f) => { const tg = S.chars[targetSlot]; f.x = src.pos.x; f.z = src.pos.z; f.rot = Math.atan2(tg.pos.x - src.pos.x, tg.pos.z - src.pos.z); };
@@ -202,8 +204,8 @@ function build(S) {
   const friction = (slot, tCast, tRes) => {
     let target = null;
     at(tCast, () => {
-      target = S.chars[slot];
-      S.mark(slot, 'friction', tCast, tRes);
+      target = S.chars[S.pickAlive(slot)];
+      S.mark(target.slot, 'friction', tCast, tRes);
       const fx = S.addFx({ kind: 'circle', x: target.pos.x, z: target.pos.z, r: K.FRIC_R, t0: tCast, t1: tRes, label: 'Friction（烈風刃）', tint: 'share' });
       fx.follow = (f) => { f.x = target.pos.x; f.z = target.pos.z; };
       S.cast('Garuda', 'Friction（烈風刃）', tCast, 1.7);
@@ -257,9 +259,10 @@ function build(S) {
   slipstream(20.61, false);
   plumesGather({ x: 0.6, z: 3.2 }, 23.1, [30.6, 31.5, 32.3, 33.1], 24.5);
   downburst(26.58);
-  at(26.71, () => { S.log('刺羽攻擊 OT：+1 層低氣壓'); addThermal(S.chars[OT]); });
+  const spinyHit = () => { const c = S.chars[S.pickAlive(OT, [OT, MT])]; S.log(`刺羽攻擊 ${c.key}：+1 層低氣壓`); addThermal(c); };
+  at(26.71, spinyHit);
   at(33.0, () => s.spiny.moveTo(-5.6, -0.4, 2.5));
-  at(35.85, () => { S.log('刺羽攻擊 OT：+1 層低氣壓'); addThermal(S.chars[OT]); });
+  at(35.85, spinyHit);
   at(36.5, () => s.spiny.moveTo(BUBBLE_AT.x, BUBBLE_AT.z, 2));
 
   // 羽毛雨 ① + 刺羽爆炸 + 寒風之嘯
@@ -270,7 +273,7 @@ function build(S) {
     t0: 38.21, tRes: 41.19, kind: 'circle', label: '刺羽爆炸（Gigastorm）', castBy: ['刺羽', 'Gigastorm', 2.7],
     geom: { x: BUBBLE_AT.x, z: BUBBLE_AT.z, r: K.GIGA_R }, killMsg: '被刺羽爆炸（半徑 5）擊中',
   });
-  at(38.3, () => S.cast('Garuda', 'Mistral Shriek（寒風之嘯）', 38.3, 2.7));
+  at(38.3, () => { S.cast('Garuda', 'Mistral Shriek（寒風之嘯）', 38.3, 2.7); S.expect('raid', 41.28); });
   at(41.28, () => S.raidwide('Mistral Shriek', 40));
 
   // 高氣壓圈 + 烈風刃 ×2
@@ -286,7 +289,7 @@ function build(S) {
   // 羽毛雨 ② + 大氣爆發
   warp(68.81, 70.37, 70.95, 70.96, 73.09, { x: 0, z: -0.6 });
   featherRain(1, 68.90, 70.42, 71.40);
-  at(73.18, () => S.cast('Garuda', 'Aerial Blast（大氣爆發）', 73.18, 2.7));
+  at(73.18, () => { S.cast('Garuda', 'Aerial Blast（大氣爆發）', 73.18, 2.7); S.expect('raid', 76.17); });
   at(76.17, () => S.raidwide('Aerial Blast', 50));
 
   // 分身登場：羽毛雨 ③、寒風之歌 ×2、台風眼 + 邪輪旋風
@@ -374,10 +377,11 @@ function build(S) {
     geom: () => ({ x: g.pos.x, z: g.pos.z, inner: K.WHEEL_IN2, r: 45 }),
     killMsg: '被覺醒邪輪旋風第 2 段（環形）擊中：要貼近 Garuda（6.5 以內）',
   });
+  let shareTg = null;
   S.hazard({
     t0: 152.1, omen: 152.1, tRes: 154.6, kind: 'cone', label: 'Downburst（覺醒）8 人分攤', tint: 'share', noKill: true,
-    geom: () => ({ x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }),
-    follow: (f) => { f.x = g.pos.x; f.z = g.pos.z; f.rot = Math.atan2(mtc().pos.x - g.pos.x, mtc().pos.z - g.pos.z); },
+    geom: () => { shareTg = mtc(); return { x: g.pos.x, z: g.pos.z, rot: g.rot, half: K.SLIP_HALF, len: K.SLIP_LEN }; },
+    follow: (f) => { f.x = g.pos.x; f.z = g.pos.z; f.rot = Math.atan2(shareTg.pos.x - g.pos.x, shareTg.pos.z - g.pos.z); },
     castBy: ['Garuda', 'Downburst（覺醒）', 2.5],
     onResolve: (inside) => {
       const n = inside.length;
@@ -601,7 +605,7 @@ function build(S) {
 function tick(S, dt) {
   const s = S.s;
   const g = s.garuda;
-  if (g && S.t >= 0 && g.visible && !g.dead && g.targetable) { const m = S.chars[MT]; g.rot = Math.atan2(m.pos.x - g.pos.x, m.pos.z - g.pos.z); }
+  if (g && S.t >= 0 && g.visible && !g.dead && g.targetable) { const m = S.mainTank(); g.rot = Math.atan2(m.pos.x - g.pos.x, m.pos.z - g.pos.z); }
   for (const p of S.actors) {
     if (p.look !== 'plume' || p.dead || !p.drain) continue;
     p.hp = Math.max(0, p.hp - p.drain * dt);
@@ -699,6 +703,7 @@ const ROLE_DESC = [
 
 PHASES.p1 = {
   id: 'p1', name: 'P1 迦樓羅', short: '迦樓羅', preRoll: -5, end: K.END, maxCharges: K.CHARGES, chargeLabel: '覺醒',
+  bossLook: 'garuda', bossR: 3,
   checkpoints: CHECKPOINTS, cues: CUES, roleDesc: ROLE_DESC,
   roll, setup, build, tick, objectives,
   start: spawnSpots,

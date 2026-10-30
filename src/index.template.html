@@ -44,6 +44,12 @@
       </div>
       <div id="keys"></div>
       <div id="banner"></div>
+      <!-- 下方中央：技能列（1～8）、自己的讀條、極限技量表 -->
+      <div id="hotbar">
+        <div id="mycast"><span id="mycast-nm"></span><div class="bar"><i id="mycast-bar"></i></div></div>
+        <div id="lbbar" title="極限技量表（全隊共用，每 50 秒一格）"><b>LB</b><i><s></s></i><i><s></s></i><i><s></s></i></div>
+        <div id="slots"></div>
+      </div>
       <button class="btn primary" id="raise">接受復活（F）<small id="raise-hint"></small></button>
       <div id="toast"></div>
       <div id="overlay"><div class="card" id="card"></div></div>
@@ -60,6 +66,7 @@
         <button class="btn" id="b-restart" title="同一組隨機重來（R）">重來</button>
         <button class="btn" id="b-new" title="換一組隨機（N）">新隨機</button>
         <button class="btn" id="b-demo" title="AI 代打（P）">AI 代打</button>
+        <button class="btn warn" id="b-giveup" title="放棄這一局，看結算（G）">放棄</button>
       </div>
     </header>
     <div class="side-body">
@@ -102,6 +109,11 @@
         <p class="note" id="partynote"></p>
       </section>
 
+      <section><h3>有人倒地時</h3>
+        <div class="seg" id="seg-death"><button data-v="stop" class="on">立即重來</button><button data-v="continue">繼續打（可復活）</button></div>
+        <p class="note" id="deathnote"></p>
+      </section>
+
       <section><h3>視角</h3>
         <div class="seg" id="seg-view"><button data-v="2d" class="on">2D</button><button data-v="3d">3D</button><button data-v="both">3D＋小地圖</button></div>
       </section>
@@ -135,14 +147,17 @@
       <details class="info"><summary>操作與規則</summary>
         <ul>
           <li><kbd>W A S D</kbd> / 方向鍵移動（3D 為相機方向，2D 為地圖方向）。</li>
-          <li><kbd>Space</kbd> 開始／暫停，<kbd>R</kbd> 重來，<kbd>N</kbd> 換隨機，<kbd>V</kbd> 切換視角，<kbd>P</kbd> AI 代打，<kbd>H</kbd> 側邊欄。</li>
+          <li><kbd>Space</kbd> 開始／暫停，<kbd>R</kbd> 重來，<kbd>N</kbd> 換隨機，<kbd>V</kbd> 切換視角，<kbd>P</kbd> AI 代打，<kbd>H</kbd> 側邊欄，<kbd>G</kbd> 放棄（繼續打模式）。</li>
+          <li>技能：<kbd>1</kbd>～<kbd>7</kbd> 或點畫面下方的技能列（按住可連續施放 GCD）。補師／C 的讀條技能在讀條中移動會中斷（最後 0.5 秒可以滑步）；近戰的攻擊要站在 Boss 身邊。復活的目標：點左邊的隊伍列表選人，沒選就救最近的倒地者。</li>
+          <li>技能效果：衝刺會加速、防擊退會擋掉擊退（大怒震用了也不會暈眩）；減傷、無敵、團隊減傷只檢查使用時機（結算會列出死刑與大範圍攻擊有沒有覆蓋）。極限技量表全隊共用，每 50 秒一格。</li>
           <li>3D：拖曳滑鼠旋轉鏡頭，滾輪縮放；鏡頭的距離／視野角／俯視上限在「設定」裡調整。</li>
           <li>場地標點：左下角選標點再點地圖放置，<kbd>Esc</kbd> 取消。</li>
-          <li>P3 自殺流：倒地後收到復活時，按 <kbd>F</kbd> 或畫面上的按鈕接受復活。</li>
+          <li>倒地後收到復活時，按 <kbd>F</kbd> 或畫面上的按鈕接受復活（起身後 5 秒無敵）。</li>
+          <li>有人倒地時：「立即重來」任何人死亡就失敗；「繼續打」倒地的人可以被補師／C 復活（AI 補師也會救人），真人玩家全部倒地或按「放棄」才結束。沒覺醒也會打到最後，結算標 ✗。單人預設立即重來，連線預設繼續打。</li>
           <li>音效要先點一下畫面或按任意鍵才會啟用（瀏覽器限制）；音量與靜音在「設定」裡調整。</li>
           <li>「完整體驗」從 P1 開場一路打到 P3 結束（階段之間無縫銜接）；分階段練習與檢查點仍然可用。</li>
-          <li>只做移動，不含技能；柔羽、火獄之楔的擊殺由時間軸自動處理。</li>
-          <li>任何人死亡即判定失敗（傷害不致死，只有機制會致死）。碰到場地邊緣會墜落死亡。</li>
+          <li>柔羽、火獄之楔、石牢的擊殺由時間軸自動處理（不依輸出）。</li>
+          <li>傷害不致死，只有機制會致死。碰到場地邊緣會墜落死亡。</li>
           <li>左上角會顯示你的狀態，隊伍列表顯示隊友狀態（低氣壓層數、熱風、火獄之鎖、詛咒之炎、點名）與剩餘秒數。</li>
         </ul>
       </details>

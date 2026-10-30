@@ -42,6 +42,7 @@ const RAISES = [
 ];
 // 起身：0:45 石牢點名前不能起；三顆石牢形成（0:50）～開始踩地板（0:55）之間起身；AI 在三連桶炸完後起（0:53.5）
 const RISE = { early: 45.0, win0: 50.2, win1: 55.5, auto: 53.5, deadline: 66.5, lastGrace: 3.5 };
+const RR_DEADLINE = 65.0 + RISE.lastGrace + 1;
 
 const fp = (id) => { const f = FR[id].pos; return ROLES.map((r) => (f[r.key] ? f[r.key].slice() : null)); };
 const near = (p, dx, dz) => [p[0] + dx, p[1] + dz];
@@ -167,12 +168,7 @@ function build(S) {
   const R = S.roll, s = S.s, at = (t, fn) => S.at(t, fn);
   const titan = s.titan;
   const sui = S.variant === 'suicide';
-  const fail = (slot, cause) => {
-    if (S.status !== 'running') return;
-    S.failure = S.failure || { t: S.t, slot, cause };
-    S.note('death', cause, slot);
-    S.status = 'failed';
-  };
+  const fail = (slot, cause) => S.mistake(slot, cause);
   const dirTo = (p) => Math.atan2(p.x - titan.pos.x, p.z - titan.pos.z);
   const lift = (t0, t1, from, to) => s.anim.push({ t0, t1, from, to });
 
@@ -181,18 +177,20 @@ function build(S) {
     t0: tJump, omen: tLand - 1.0, assistFrom: tJump, tRes: tLand, kind: 'circle', label: 'Geocrush（大地粉碎）',
     geom: { x: p.x, z: p.z, r: K.GEO_KILL },
     killMsg: `大地粉碎：離泰坦落點太近（${K.GEO_KILL} 以內）被秒殺`,
-    onResolve: () => { S.screenFx.push({ t: S.t, type: 'raidwide', power: 1 }); S.sound('quake'); for (const c of S.alive()) S.damage(c, 25, 'Geocrush', true); },
+    onResolve: () => { S.screenFx.push({ t: S.t, type: 'raidwide', power: 1 }); S.sound('quake'); S.recordRaid('Geocrush（大地粉碎）', 25); for (const c of S.alive()) S.damage(c, 25, 'Geocrush', true); },
   });
   const raid = (name, pct, power) => {
     S.screenFx.push({ t: S.t, type: 'raidwide', power });
+    S.recordRaid(name, pct);
     for (const c of S.alive()) S.damage(c, pct, name, true);
   };
-  const buster = (t, name) => S.hazard({
-    t0: t - 0.8, omen: t - 0.8, tRes: t, kind: 'cone', label: name, tankSafe: true, tankDmg: 55,
-    geom: () => ({ x: titan.pos.x, z: titan.pos.z, rot: dirTo(S.chars[MT].pos), half: K.BUSTER_HALF, len: K.BUSTER_LEN, npcIgnore: [MT] }),
-    follow: (f) => { f.x = titan.pos.x; f.z = titan.pos.z; f.rot = dirTo(S.chars[MT].pos); },
+  // 順劈的對象在讀條開始時就鎖定（讀條中 MT 倒地也不會轉向人群）
+  const buster = (t, name) => { let mt = null; return S.hazard({
+    t0: t - 0.8, omen: t - 0.8, tRes: t, kind: 'cone', label: name, tankSafe: true, tankDmg: 55, buster: true,
+    geom: () => { mt = S.mainTank(); return { x: titan.pos.x, z: titan.pos.z, rot: dirTo(mt.pos), half: K.BUSTER_HALF, len: K.BUSTER_LEN, npcIgnore: [mt.slot] }; },
+    follow: (f) => { f.x = titan.pos.x; f.z = titan.pos.z; f.rot = dirTo(mt.pos); },
     killMsg: `被${name}（泰坦正面順劈）擊中：非坦克不能站在泰坦正面`,
-  });
+  }); };
   /** 大地之重：每個活著的人腳下出圈。onHit(c) 決定被打到的結果。 */
   const wotl = (tAppear, tRes, onHit) => {
     let spots = [];
@@ -246,7 +244,7 @@ function build(S) {
   /** 泰坦跳起（面向 = 落點方向）→ 消失 → 落在場邊。 */
   const jump = (tTurn, tLand, bearing) => {
     const land = U.atBearing(bearing, K.EDGE);
-    at(tTurn, () => { s.faceMT = false; titan.rot = rotFromBearing(bearing); titan.targetable = false; titan.goal = null; S.log(`泰坦轉向 ${DIR4[bearing]} 並跳起：落點就是他面向的正點，去最遠的地方`); S.sound('jump'); });
+    at(tTurn, () => { s.faceMT = false; titan.rot = rotFromBearing(bearing); titan.targetable = false; titan.goal = null; S.log(`泰坦轉向 ${DIR4[bearing]} 並跳起：落點就是他面向的正點，去最遠的地方`); S.sound('jump'); S.expect('raid', tLand); });
     lift(tTurn + 0.6, tTurn + 1.3, 0, 1);
     at(tTurn + 1.3, () => { titan.visible = false; });
     geocrush(tTurn + 0.6, tLand, land);
@@ -257,12 +255,12 @@ function build(S) {
   };
 
   // ---------------------------------------------------------------- 時間軸：覺醒前
-  at(0.0, () => S.log('伊弗利特消失。泰坦從天而降（大地粉碎）：留在場地外圍，離中心 16 以上'));
+  at(0.0, () => { S.log('伊弗利特消失。泰坦從天而降（大地粉碎）：留在場地外圍，離中心 16 以上'); S.expect('raid', 4.5); });
   at(3.6, () => { titan.pos.x = 0; titan.pos.z = 0; titan.visible = true; titan.rot = rotFromBearing(norm360(s.O)); });
   lift(3.9, 4.5, 1, 0);
   geocrush(0.0, 4.5, { x: 0, z: 0 });
   at(5.0, () => { s.faceMT = true; });
-  at(7.0, () => { titan.targetable = true; S.cast('泰坦', 'Earthen Fury（大地之怒）', 7.0, 3.0); });
+  at(7.0, () => { titan.targetable = true; S.cast('泰坦', 'Earthen Fury（大地之怒）', 7.0, 3.0); S.expect('raid', 13.0); });
   at(13.0, () => { raid('Earthen Fury（大地之怒）', 35, 0.8); S.log('大地之怒：全體攻擊'); });
   buster(19.0, 'Rock Buster（碎岩）');
   buster(22.0, 'Mountain Buster（山崩）');
@@ -270,7 +268,7 @@ function build(S) {
   wotl(23.0, 26.0);
   wotl(26.0, 29.0, (hit) => {
     for (const c of hit) {
-      if (sui && SUI.includes(c.slot)) S.kill(c, '自殺流：留在第二波大地之重裡', { planned: true });
+      if (sui && SUI.includes(c.slot)) S.kill(c, '自殺流：留在第二波大地之重裡', { planned: true, until: c.slot === RR ? RR_DEADLINE : RISE.deadline });
       else S.kill(c, '被大地之重（腳下的圈，半徑 4）擊中');
     }
     if (sui) for (const k of SUI) if (S.chars[k].alive) fail(k, `自殺流：${ROLES[k].key} 要留在第二波大地之重裡死亡（只剩 MT／H1／H2／C 活著，石牢才會固定點 H1／H2／C）`);
@@ -289,7 +287,7 @@ function build(S) {
   at(43.0, () => {
     const u = kbDir();
     raid('Upheaval（大怒震）', 12, 0.7);
-    for (const c of S.alive()) { S.knockVec(c, u.x, u.z, K.KB, K.KB_DUR); c.stunUntil = 45.0; S.addStatus(c.slot, 'stun', 2.0); }
+    for (const c of S.alive()) if (S.knockVec(c, u.x, u.z, K.KB, K.KB_DUR)) { c.stunUntil = 45.0; S.addStatus(c.slot, 'stun', 2.0); }   // 開防擊退：不被擊退也不暈眩
     S.sound('knock');
     S.log('大怒震：全員被擊退並暈眩 2 秒');
   });
@@ -375,26 +373,32 @@ function build(S) {
   // ---------------------------------------------------------------- 自殺流：復活
   if (sui) {
     s.autoAccept = { [OT]: RISE.auto, [M1]: RISE.auto, [M2]: RISE.auto, [RR]: 65.5 };
+    // 復活由技能完成：AI 補師／C 照分配的時間施放（即刻＝瞬發；R 用 10 秒讀條）；真人補師要自己按
     for (const r of RAISES) {
-      if (r.cast) at(r.cast, () => { if (S.chars[r.by].alive) S.cast(ROLES[r.by].key, `復活 → ${ROLES[r.slot].key}（${r.how}）`, r.cast, r.t - r.cast); });
-      at(r.t, () => {
+      at(r.cast || r.t, () => {
         const c = S.chars[r.slot], by = S.chars[r.by];
-        if (c.alive || !by.alive) return;
-        c.raise = { by: r.by, t: r.t };
-        S.log(`${ROLES[r.by].key} 復活 ${ROLES[r.slot].key}（${r.how}）：先別起身，等三顆石牢形成`, r.slot);
+        if (c.alive || c.raise || !by.alive || !by.auto) return;
+        S.aiFree(by);
+        if (!r.cast) S.useSkill(r.by, 'swift');
+        S.useSkill(r.by, 'raise', r.slot);
       });
     }
-    // 沒有及時起身
-    at(RISE.deadline, () => { for (const k of [OT, M1, M2]) { const c = S.chars[k]; if (!c.alive && c.raise) fail(k, `${ROLES[k].key} 沒有接受復活（要在 0:50～0:55 起身）`); } });
-    at(65.0 + RISE.lastGrace + 1, () => { const c = S.chars[RR]; if (!c.alive && c.raise) fail(RR, 'R 沒有接受復活（C 的 10 秒復活到了就要起身）'); });
+    // 期限到了還沒起身：沒被救（補師的失誤）或救了沒接受（倒地者的失誤）
+    const late = (k, deadline) => {
+      const c = S.chars[k], r = RAISES.find((x) => x.slot === k);
+      if (c.alive) return;
+      if (c.raise) fail(k, k === RR ? 'R 沒有接受復活（C 的 10 秒復活到了就要起身）' : `${ROLES[k].key} 沒有接受復活（要在 0:50～0:55 起身）`);
+      else if (c.planned) fail(r.by, `${ROLES[r.by].key} 沒有復活 ${ROLES[k].key}（${k === RR ? '踩地板期間 10 秒詠唱' : '0:50 前'}）`);
+    };
+    at(RISE.deadline, () => { for (const k of [OT, M1, M2]) late(k); });
+    at(RR_DEADLINE, () => late(RR));
   }
   /** 接受復活（玩家按 F／AI 自動）。 */
   s.accept = (slot) => {
     const c = S.chars[slot];
     if (c.alive || !c.raise || S.status !== 'running') return false;
     const t = S.t, last = slot === RR;
-    S.revive(c, 30);
-    c.invulnUntil = t + 5; S.addStatus(slot, 'transcendent', 5);
+    S.raiseUp(c);
     c.stats.rise = t;
     if (!last && t < RISE.early) { fail(slot, `太早接受復活（${(t / 60 | 0)}:${String(Math.floor(t % 60)).padStart(2, '0')}）：0:45 花崗石牢點名前起身會被點到，石牢就不再固定（三顆石牢形成後再起）`); return true; }
     if (S.humans.has(slot)) {
@@ -414,6 +418,7 @@ function build(S) {
   shrink(83.0, 86.0, K.SHRINK2);
   at(88.0, () => {
     const k = R.gaol2Pick.find((x) => S.chars[x].alive);
+    if (k === undefined) return;   // 繼續打模式：MT 以外都倒地
     s.gaol2 = { slot: k, spot: [0, 0], pos: null, actor: null };
     R.gaol2Target = ROLES[k].key;
     S.mark(k, 'gaol', 88.0, 93.0);
@@ -422,15 +427,19 @@ function build(S) {
   });
   at(88.5, () => { const p = T2(S, [0, 6.2]); titan.moveTo(p[0], p[1], 3); });
   at(93.0, () => {
-    const g = s.gaol2, c = S.chars[g.slot];
+    const g = s.gaol2;
+    if (!g) return;
+    const c = S.chars[g.slot];
     g.pos = { x: c.pos.x, z: c.pos.z };
     if (!c.alive) return;
     c.stunUntil = 999; c.invulnUntil = 999; c.goal = null; S.addStatus(c.slot, 'gaol', null);
     c.stats.gaol2Ok = Math.hypot(c.pos.x, c.pos.z) <= K.GAOL_TOL;
   });
-  at(95.0, () => { const g = s.gaol2; g.actor = S.actor('gaol', '花崗石牢', g.pos.x, g.pos.z, 0); S.cast('花崗石牢', 'Granite Impact（花崗岩衝擊・覺醒）', 95.0, 5.5); S.log('花崗石牢出現：全員集火打掉'); });
+  at(95.0, () => { const g = s.gaol2; if (!g) return; g.actor = S.actor('gaol', '花崗石牢', g.pos.x, g.pos.z, 0); S.cast('花崗石牢', 'Granite Impact（花崗岩衝擊・覺醒）', 95.0, 5.5); S.log('花崗石牢出現：全員集火打掉'); });
   at(100.0, () => {
-    const g = s.gaol2, c = S.chars[g.slot];
+    const g = s.gaol2;
+    if (!g) return;
+    const c = S.chars[g.slot];
     S.despawn(g.actor);
     if (c.alive) { c.stunUntil = 0; c.invulnUntil = S.t + 0.3; S.removeStatus(c.slot, 'gaol'); }
     S.log('花崗石牢被擊破');
@@ -456,7 +465,8 @@ function build(S) {
   at(K.END, () => S.finishWith(s.woken, `泰坦沒有覺醒（${s.charges}/${K.CHARGES}）：花崗石牢沒有被爆破岩石連鎖炸開，泰坦位沒有污泥`));
 
   // ---------------------------------------------------------------- 走位
-  const MV = (t, id, title, spots, tip, frame, opt) => S.move(t, id, title, (S2) => sanitize(S2, spots(S2)), Object.assign({ tip: tipf(tip), frame }, opt || {}));
+  // 拉怪坦克倒地時另一位坦克接手站位（在修正安全點之前換）
+  const MV = (t, id, title, spots, tip, frame, opt) => S.move(t, id, title, (S2) => sanitize(S2, S2.swapTanks(spots(S2))), Object.assign({ tip: tipf(tip), frame, noSwap: true }, opt || {}));
   const A0 = (id, fix) => (S2) => { const a = fp(id); if (fix) fix(a); return a.map((p) => T0(S2, p)); };
   const A1 = (id, fix) => (S2) => { const a = fp(id); if (fix) fix(a, S2); return a.map((p) => T1(S2, p)); };
   const A2 = (id, fix) => (S2) => { const a = fp(id); if (fix) fix(a, S2); return a.map((p) => T2(S2, p)); };
@@ -564,12 +574,15 @@ function build(S) {
 function tick(S, dt) {
   const s = S.s, titan = s.titan;
   // 泰坦面向 MT（跳躍時除外）
-  if (s.faceMT && titan.visible && !titan.dead) { const m = S.chars[MT]; titan.rot = Math.atan2(m.pos.x - titan.pos.x, m.pos.z - titan.pos.z); }
+  if (s.faceMT && titan.visible && !titan.dead) { const m = S.mainTank(); titan.rot = Math.atan2(m.pos.x - titan.pos.x, m.pos.z - titan.pos.z); }
   for (const a of s.anim) if (S.t >= a.t0 && S.t <= a.t1 + dt) titan.lift = a.from + (a.to - a.from) * Math.min(1, (S.t - a.t0) / (a.t1 - a.t0));
   // 大怒震落點預覽（教學）
   if (s.kbPrev && S.t <= 43.0) {
     const d = Math.hypot(titan.pos.x, titan.pos.z) || 1;
-    for (const p of s.kbPrev) { const c = S.chars[p.owner]; p.x = c.pos.x - titan.pos.x / d * K.KB; p.z = c.pos.z - titan.pos.z / d * K.KB; }
+    for (const p of s.kbPrev) {
+      const c = S.chars[p.owner], k = S.hasStatus(c.slot, 'antikb') ? 0 : K.KB;   // 開防擊退：落點就是原地
+      p.x = c.pos.x - titan.pos.x / d * k; p.z = c.pos.z - titan.pos.z / d * k;
+    }
   }
   // 污泥：站在裡面太久會死
   for (const c of S.chars) {
@@ -593,6 +606,12 @@ function objectives(S, slot) {
     out.push({ ok: okRise, text: last ? '收到 C 的 10 秒復活就起身' : '三顆石牢形成後～開始踩地板前（0:50～0:55）起身' });
     out.push({ ok: c.alive, text: '起身後存活到最後' });
   } else out.push({ ok: c.alive, text: '全程存活' });
+  if (S.variant === 'suicide') {
+    for (const r of RAISES.filter((x) => x.by === k)) {
+      const dl = r.slot === RR ? RR_DEADLINE - 1 : RISE.win0;
+      out.push({ ok: st.raises.some((x) => x.slot === r.slot && x.t <= dl), text: `自殺流：${r.how}復活 ${ROLES[r.slot].key}（${r.slot === RR ? '踩地板期間完成' : '0:50 前'}）` });
+    }
+  }
   const g = s.gaol.find((x) => x.slot === k);
   if (g) out.push({ ok: !!st.gaolOk, text: `花崗石牢：照順序站「${g.name}」` });
   if (s.gaol2 && s.gaol2.slot === k) out.push({ ok: !!st.gaol2Ok, text: '覺醒後花崗石牢：站 1 號位' });
@@ -669,6 +688,7 @@ const ROLE_DESC_SUI = [
 
 PHASES.p3 = {
   id: 'p3', name: 'P3 泰坦', short: '泰坦', preRoll: -3, end: K.END, maxCharges: K.CHARGES, chargeLabel: '覺醒',
+  bossLook: 'titan', bossR: 5,
   checkpoints: CHECKPOINTS, cues: CUES, roleDesc: ROLE_DESC,
   cuesFor: (v) => (v === 'suicide' ? CUES.concat(CUES_SUI).sort((a, b) => a[0] - b[0]) : CUES),
   roleDescFor: (v) => (v === 'suicide' ? ROLE_DESC_SUI : ROLE_DESC),

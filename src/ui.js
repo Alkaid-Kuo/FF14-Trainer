@@ -1,7 +1,7 @@
 /* UI 控制：階段（含完整體驗）、模式、職位、起始點、輸入、HUD、音效、結算。 */
 (function () {
 'use strict';
-const { Sim, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR } = window.UWU;
+const { Sim, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR, SKILLS, LOADOUT, GCD, skillCheck, bossOf, meleeReach, raiseTarget } = window.UWU;
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;
 const PHASE_ORDER = ['p1', 'p2', 'p3'];  // 已完成的階段（依戰鬥順序）
@@ -11,7 +11,10 @@ const S = {
   pid: 'p1', mode: 'guide', party: 'multi', role: 0, view: '2d', viewTouched: false, cp: 0, speed: 1,
   phase: 'ready', seed: 0, sim: null, keys: new Set(), acc: 0, dismissed: false, p3v: 'regular',
   ci: 0, offset: 0, chainLog: [],
+  death: { solo: 'stop', net: 'continue' },   // 有人倒地時：單人預設立即重來、連線預設繼續打
+  target: null, held: null,                   // 復活目標（點隊伍列表）、按住的技能鍵
 };
+const deathMode = () => (netOn() ? S.death.net : S.death.solo);
 let r2d = null, r3d = null;
 const sfx = new window.Sfx();
 const stage = $('stage');
@@ -81,6 +84,17 @@ function buildSide() {
   const p3v = loadSetting(P3V_STORE, { v: 'regular' });
   S.p3v = p3v.v === 'suicide' ? 'suicide' : 'regular';
   seg('seg-p3v', (v) => { S.p3v = v; saveSetting(P3V_STORE, { v }); newRun(S.seed); });
+  const dm = loadSetting(DEATH_STORE, S.death);
+  S.death = { solo: dm.solo === 'continue' ? 'continue' : 'stop', net: dm.net === 'stop' ? 'stop' : 'continue' };
+  seg('seg-death', (v) => {
+    if (isGuest()) { syncSide(); return; }
+    S.death[netOn() ? 'net' : 'solo'] = v; saveSetting(DEATH_STORE, S.death);
+    // 打到一半切換：直接套用到這一局；還沒開始就重新建立
+    if (S.phase === 'running' || S.phase === 'paused') { S.sim.keepGoing = v === 'continue'; S.sim.stopOnDeath = v !== 'continue'; syncSide(); }
+    else newRun(S.seed);
+    if (isHost()) sendCfg();
+  });
+  $('b-giveup').addEventListener('click', (e) => { e.currentTarget.blur(); giveUp(); });
   $('raise').addEventListener('click', (e) => { e.currentTarget.blur(); acceptRaise(); });
 
   $('b-start').addEventListener('click', (e) => { e.currentTarget.blur(); startPause(); });
@@ -93,6 +107,7 @@ function buildSide() {
 }
 
 const P3V_STORE = 'uwu-trainer-p3v';
+const DEATH_STORE = 'uwu-trainer-death';
 // 3D 鏡頭限制：預設為 FF14 近似值，可調整並存在瀏覽器
 const CAM_DEFAULT = { maxDist: 20, fov: 45, maxPitchDeg: 80 };
 const CAM_STORE = 'uwu-trainer-cam';
@@ -208,9 +223,15 @@ function buildWaymarks() {
 function syncSide() {
   setSeg('seg-phase', S.pid);
   setSeg('seg-mode', S.mode);
+  const keep = deathMode() === 'continue';
   $('phasenote').textContent = fullMode()
-    ? `從 P1 開場一路打到 ${phaseTag(FULL_CHAIN[FULL_CHAIN.length - 1])} 結束，階段之間無縫銜接（跟遊戲一樣沒有倒數）；任何人死亡即失敗（自殺流的計畫倒地除外）。`
+    ? `從 P1 開場一路打到 ${phaseTag(FULL_CHAIN[FULL_CHAIN.length - 1])} 結束，階段之間無縫銜接（跟遊戲一樣沒有倒數）；${keep ? '倒地的人延續到下一階段，等人復活。' : '任何人死亡即失敗（自殺流的計畫倒地除外）。'}`
     : '「完整體驗」可從 P1 連續挑戰到 P3。';
+  setSeg('seg-death', deathMode());
+  $('deathnote').textContent = keep
+    ? '倒地的人可以被補師／C 復活（AI 補師也會救人），真人玩家全部倒地或按「放棄」才結束；沒覺醒也打到最後（結算標 ✗）。'
+    : '任何人死亡就失敗，馬上看結算重來（自殺流的計畫倒地除外）。';
+  $('app').classList.toggle('can-giveup', keep && !isGuest() && (S.phase === 'running' || S.phase === 'paused'));
   const p3on = S.pid === 'p3' || fullMode();
   $('p3vsec').classList.toggle('show', p3on);
   setSeg('seg-p3v', S.p3v);
@@ -243,7 +264,7 @@ function syncSide() {
   // 連線：隊員不能控制；連線時固定 1 倍速
   const lock = isGuest();
   for (const id of ['b-start', 'b-restart', 'b-new', 'cp']) $(id).disabled = lock;
-  document.querySelectorAll('#seg-phase button, #seg-p3v button').forEach((b) => { b.disabled = lock; });
+  document.querySelectorAll('#seg-phase button, #seg-p3v button, #seg-death button').forEach((b) => { b.disabled = lock; });
   if (netOn()) {
     $('speedsec').style.display = 'none';
     $('partynote').textContent = S.party === 'multi' ? '連線中：其他職位由隊友操作，沒人的職位由 AI 操作。' : '只顯示你自己（隊友照樣在打）。';
@@ -387,7 +408,7 @@ function hostRosterChanged() {
   sendCfg();
   if (fresh.length) { sendTick(); for (const id of fresh) sendFull(id); }
 }
-const cfgMsg = () => ({ t: 'cfg', pid: S.pid, ci: S.ci, cp: S.cp, seed: S.seed, p3v: S.p3v, roles: N.roles, wm: wm.list });
+const cfgMsg = () => ({ t: 'cfg', pid: S.pid, ci: S.ci, cp: S.cp, seed: S.seed, p3v: S.p3v, death: deathMode(), roles: N.roles, wm: wm.list });
 function sendCfg() { N.link.send(cfgMsg()); }
 function sendFull(to) {
   const m = { t: 'full', ep: N.ep, ph: S.phase, off: S.offset, pid: curPid(), ci: S.ci, variant: S.sim.variant, cfg: cfgMsg(), snap: N.rep.snapshot(S.sim, true) };
@@ -415,7 +436,12 @@ function hostMessage(m) {
   if (m.t === 'me') { if (slot !== undefined && S.sim.chars[slot].remote) S.sim.setRemote(slot, m.x, m.z, m.r); return; }
   if (m.t === 'act') {
     if (slot === undefined) return;
-    if (m.a === 'raise' && S.phase === 'running' && S.sim.s.accept) S.sim.s.accept(slot);
+    if (m.a === 'raise' && S.phase === 'running') S.sim.acceptRaise(slot);
+    if (m.a === 'skill' && S.phase === 'running' && SKILLS[m.id]) {
+      const c = S.sim.chars[slot];
+      if (c.remote && m.x !== undefined) c.net = { x: m.x, z: m.z, rot: m.r };   // 按技能時的位置（不算移動）
+      S.sim.useSkill(slot, m.id, m.tg);
+    }
     if (m.a === 'auto') S.sim.setRemoteAuto(slot, !!m.on);
     return;
   }
@@ -450,7 +476,7 @@ function applyCfg(c) {
   N.cfg = c; N.roles = c.roles;
   const mine = N.roles[N.me];
   const roleChanged = mine !== undefined && mine !== S.role;
-  S.pid = c.pid; S.ci = c.ci; S.cp = c.cp; S.seed = c.seed; S.p3v = c.p3v;
+  S.pid = c.pid; S.ci = c.ci; S.cp = c.cp; S.seed = c.seed; S.p3v = c.p3v; S.death.net = c.death;
   if (mine !== undefined) S.role = mine;
   if (JSON.stringify(c.wm) !== JSON.stringify(wm.list)) applyWaymarks(c.wm);
   rebuildCp();
@@ -495,7 +521,8 @@ function guestTick(now, dt) {
     if (N.kb && N.kb.left > 0) { me.pos.x += N.kb.vx * STEP; me.pos.z += N.kb.vz * STEP; N.kb.left -= STEP; }
     else if (mir.t >= me.stunUntil) {
       const inp = readInput(), l = Math.hypot(inp.x, inp.z);
-      if (l > 0.01) { me.pos.x += inp.x * C.SPEED * STEP; me.pos.z += inp.z * C.SPEED * STEP; me.rot = Math.atan2(inp.x, inp.z); }
+      const v = C.SPEED * (mir.statuses.some((x) => x.slot === me.slot && x.id === 'sprint' && (x.t1 === null || mir.t <= x.t1)) ? 1.3 : 1);   // 衝刺
+      if (l > 0.01) { me.pos.x += inp.x * v * STEP; me.pos.z += inp.z * v * STEP; me.rot = Math.atan2(inp.x, inp.z); }
     }
     me.walk = Math.hypot(me.pos.x - x0, me.pos.z - z0) / STEP;
     N.acc -= STEP;
@@ -569,7 +596,7 @@ function syncNet() {
 
 // ------------------------------------------------------------------ run control
 function makeSim(pid, extra) {
-  return new Sim(Object.assign({ phase: pid, seed: phaseSeed(pid), playerSlot: S.role, stopOnDeath: true, variant: pid === 'p3' ? S.p3v : null,
+  return new Sim(Object.assign({ phase: pid, seed: phaseSeed(pid), playerSlot: S.role, stopOnDeath: true, onDeath: deathMode(), variant: pid === 'p3' ? S.p3v : null,
     remote: isHost() ? remoteSlots() : [] }, extra || {}));
 }
 function newRun(seed) {
@@ -590,6 +617,7 @@ function phaseRecord(sim, slot) {
   return {
     name: sim.phase.name, objectives: sim.objectives(slot), roll: sim.phase.rollSummary(sim.roll),
     hits: sim.notes.filter((n) => n.type === 'hit' && n.slot === slot).slice(0, 6),
+    skills: sim.skillSummary(slot),
   };
 }
 /** 本階段每位真人的檢查（連線時每個人看自己的）。 */
@@ -600,7 +628,12 @@ function advanceChain() {
   S.chainLog.push(phaseRecords(prev));
   S.offset += prev.t;
   S.ci++;
-  S.sim = makeSim(curPid(), { startPos: prev.chars.map((c) => [c.pos.x, c.pos.z]), preRoll: 0 });
+  // 位置、倒地者、極限技量表、技能冷卻都延續到下一階段
+  S.sim = makeSim(curPid(), {
+    startPos: prev.chars.map((c) => [c.pos.x, c.pos.z]), preRoll: 0,
+    dead: prev.chars.filter((c) => !c.alive).map((c) => c.slot), lb: prev.lb,
+    carry: prev.chars.map((c) => { const o = {}; for (const k of Object.keys(c.cd)) if (c.cd[k] > prev.t) o[k] = c.cd[k] - prev.t; return o; }),
+  });
   if (prev.pc.auto) S.sim.setPlayerAuto(true);
   for (const slot of remoteSlots()) if (prev.chars[slot].auto) S.sim.setRemoteAuto(slot, true);   // 開著 AI 代打的隊員維持 AI
   audioReset();
@@ -617,12 +650,66 @@ function startPause() {
   syncSide();
   if (isHost()) sendTick();
 }
-/** 自殺流：接受復活（倒地且收到復活時）。 */
+/** 接受復活（倒地且收到復活時）。 */
 function acceptRaise() {
   const sim = S.sim;
   if (S.phase !== 'running' || sim.pc.alive || !sim.pc.raise) return;
   if (isGuest()) { N.link.send({ t: 'act', a: 'raise' }); return; }
-  if (sim.s.accept) sim.s.accept(sim.pc.slot);
+  sim.acceptRaise(sim.pc.slot);
+}
+/** 放棄這一局（房主／單人）：直接看結算。 */
+function giveUp() {
+  if (!hostOk() || !S.sim || !(S.phase === 'running' || S.phase === 'paused')) return;
+  S.sim.giveUp();
+  S.phase = 'ended'; syncSide(); showResult();
+}
+// ---------------- 技能
+const hot = { slots: [], castKey: '', lbKey: '', sendT: {} };
+function buildHotbar() {
+  const box = $('slots'); box.innerHTML = ''; hot.slots = [];
+  LOADOUT[S.role].forEach((id, i) => {
+    const sk = SKILLS[id];
+    const b = document.createElement('button');
+    b.className = 'sk' + (sk.gcd ? ' gcd' : '') + (sk.lb ? ' lbk' : '');
+    b.innerHTML = `<span class="kb">${i + 1}</span>${sk.short}<i class="cd"></i><span class="ct"></span>`;
+    b.title = `${sk.name}（${i + 1}）：${sk.tip}`;
+    b.addEventListener('click', (e) => { e.currentTarget.blur(); trySkill(id, true); });
+    box.appendChild(b);
+    hot.slots.push({ id, el: b, cd: b.querySelector('.cd'), ct: b.querySelector('.ct'), key: '' });
+  });
+  hot.castKey = ''; hot.lbKey = '';
+}
+/** 使用技能。fresh：這次是按下（不是按住重複），失敗時才跳提示。 */
+function trySkill(id, fresh) {
+  sfx.unlock();
+  const sim = S.sim;
+  if (!sim || S.phase !== 'running') { if (fresh) toast(S.phase === 'paused' ? '暫停中' : '還沒開始'); return; }
+  if (isGuest()) {
+    if (N.spectate) return;
+    const chk = skillCheck(sim, sim.playerSlot, id, S.target);
+    if (chk.why === undefined || (chk.gcdWait !== undefined && chk.gcdWait <= 0.15)) {
+      const now = performance.now();
+      if (now - (hot.sendT[id] || 0) < 200) return;   // 按住時不要一直送
+      hot.sendT[id] = now;
+      // 連同目前位置一起送：剛停下來就讀條時，房主不會把「最後一次位置更新」誤判成讀條中移動
+      const me = sim.pc, x = Math.round(me.pos.x * 100) / 100, z = Math.round(me.pos.z * 100) / 100, r = Math.round(me.rot * 1000) / 1000;
+      N.link.send({ t: 'act', a: 'skill', id, tg: S.target, x, z, r });
+      N.sentMe = x + ',' + z + ',' + r;
+      if (chk.why === undefined) skillFlash(id);
+    } else if (fresh && chk.why) toast(chk.why);
+    return;
+  }
+  const r = sim.useSkill(sim.playerSlot, id, S.target);
+  if (r.why === undefined) { if (!r.queued) skillFlash(id); } else if (fresh && r.why) toast(r.why);
+}
+function skillFlash(id) {
+  const s = hot.slots.find((x) => x.id === id);
+  if (s) { s.el.classList.remove('fl'); void s.el.offsetWidth; s.el.classList.add('fl'); }
+  sfx.play('skill');
+}
+function setTarget(slot) {
+  S.target = S.target === slot ? null : slot;
+  partyRows.forEach((row, i) => { if (row) row.el.classList.toggle('tg', i === S.target); });
 }
 function toggleDemo() {
   if (!S.sim || S.phase === 'ended') return;
@@ -680,7 +767,9 @@ function audioTick() {
     au.marks.add(m);
     if (m.slot === me) sfx.play('markMe'); else if (!solo) sfx.play('mark');
   }
-  for (const f of sim.screenFx) if (!au.screen.has(f)) { au.screen.add(f); sfx.play('raidwide', f.power); }
+  for (const f of sim.screenFx) if (!au.screen.has(f)) { au.screen.add(f); sfx.play(f.type === 'lb' ? 'lb' : 'raidwide', f.power); }
+  if (!sim.pc.alive && sim.pc.raise && !au.raised) sfx.play('raised');
+  au.raised = !sim.pc.alive && !!sim.pc.raise;
   for (const f of sim.sounds) if (!au.sounds.has(f)) { au.sounds.add(f); sfx.play(f.name); }
   sim.chars.forEach((c, i) => {
     if (au.alive[i] && !c.alive) { if (i === me) sfx.play('deathMe'); else if (!solo) sfx.play('death'); if (c.kb) sfx.play('knock'); }
@@ -700,10 +789,16 @@ function buildParty() {
     if (r.slot === S.role) { partyRows.push(null); return; }
     const d = document.createElement('div'); d.className = 'pm';
     const owner = netOn() ? slotOwner(r.slot) : null;
-    d.innerHTML = `<span class="k" style="background:${r.color}">${r.key}</span><span class="hp"><i></i></span><span class="st"></span>` + (netOn() ? `<span class="who${owner ? '' : ' ai'}">${owner ? escapeHtml(memberName(owner)) : 'AI'}</span>` : '');
+    d.innerHTML = `<span class="k" style="background:${r.color}">${r.key}</span><span class="hp"><i></i></span><span class="st"></span>` + (netOn() ? `<span class="who${owner ? '' : ' ai'}">${owner ? escapeHtml(memberName(owner)) : 'AI'}</span>` : '')
+      + '<span class="cb"><i></i></span>';
+    d.title = '點一下選為目標（復活用），再點一次取消';
+    d.addEventListener('click', () => setTarget(r.slot));
+    if (S.target === r.slot) d.classList.add('tg');
     box.appendChild(d);
-    partyRows.push({ el: d, hp: d.querySelector('.hp i'), st: d.querySelector('.st'), html: null, dead: null, hw: '', hc: null });
+    partyRows.push({ el: d, hp: d.querySelector('.hp i'), st: d.querySelector('.st'), cb: d.querySelector('.cb'), cbi: d.querySelector('.cb i'), cbKey: '', html: null, dead: null, hw: '', hc: null });
   });
+  if (S.target === S.role) S.target = null;
+  buildHotbar();
   const me = ROLES[S.role];
   $('me-key').textContent = me.key; $('me-key').style.background = me.color;
   $('me-name').textContent = me.name;
@@ -726,6 +821,51 @@ function myStatusHtml(list, t) {
     const rem = remText(s, t);
     return `<div class="msi${d.mark ? ' mk' : ''}" style="--c:${d.color}"><b>${d.icon}${s.stacks ? `<em>${s.stacks}</em>` : ''}</b><span>${d.name}${s.stacks ? ` ×${s.stacks}` : ''}</span><small>${rem ? rem + ' 秒' : '持續中'}</small></div>`;
   }).join('');
+}
+
+/** 隊伍列表裡倒地者的狀態：陣亡／誰正在救／已收到復活。 */
+function deadHtml(sim, c) {
+  if (c.raise) return `<span class="rz">已收到復活（${ROLES[c.raise.by].key}）</span>`;
+  const r = sim.chars.find((x) => x.cast && x.cast.id === 'raise' && x.cast.tg === c.slot);
+  if (r) return `<span class="rz">${r.key} 復活中…</span>`;
+  return `<span class="dead-x">${c.planned ? '倒地' : '陣亡'}</span>`;
+}
+/** 技能列：冷卻、GCD、不能用（倒地、距離太遠、沒有目標）、排隊中；自己的讀條；極限技量表。 */
+function updateHotbar(sim) {
+  const pc = sim.pc, t = sim.t, run = S.phase === 'running' && t >= 0;
+  const b = bossOf(sim), far = !b || Math.hypot(b.pos.x - pc.pos.x, b.pos.z - pc.pos.z) > meleeReach(sim);
+  const blocked = !pc.alive || t < pc.stunUntil;
+  for (const sl of hot.slots) {
+    const sk = SKILLS[sl.id];
+    let p = 0, txt = '';
+    if (sk.gcd) { const rem = pc.gcdUntil - t; if (rem > 0 && run) p = Math.min(1, rem / GCD); }
+    else if (!sk.lb && pc.cd[sl.id] !== undefined) { const rem = pc.cd[sl.id] - t; if (rem > 0) { p = rem / sk.cd; txt = String(Math.ceil(rem)); } }
+    const off = !run || blocked || (sk.lb && sim.lb < 1) || (sk.melee && far) || (sk.gcd && !sk.raise && !b) || (sk.raise && !raiseTarget(sim, pc, S.target));
+    const q = !!(pc.queued && pc.queued.id === sl.id);
+    const key = `${p.toFixed(2)}|${txt}|${off}|${q}`;
+    if (key === sl.key) continue;
+    sl.key = key;
+    sl.cd.style.setProperty('--p', p.toFixed(3)); sl.ct.textContent = txt;
+    sl.el.classList.toggle('off', off); sl.el.classList.toggle('q', q);
+  }
+  const k = pc.cast, ck = k ? `${k.id}|${k.tg}|${Math.min(1, (t - k.t0) / (k.t1 - k.t0)).toFixed(3)}` : '';
+  if (ck !== hot.castKey) {
+    const el = $('mycast');
+    el.classList.toggle('show', !!k); el.classList.toggle('raise', !!k && k.id === 'raise');
+    if (k) {
+      $('mycast-nm').textContent = SKILLS[k.id].name + (k.id === 'raise' && k.tg >= 0 ? ` → ${ROLES[k.tg].key}` : '') + `　${Math.max(0, k.t1 - t).toFixed(1)}`;
+      $('mycast-bar').style.width = (Math.min(1, (t - k.t0) / (k.t1 - k.t0)) * 100).toFixed(1) + '%';
+    }
+    hot.castKey = ck;
+  }
+  const lk = sim.lb.toFixed(2);
+  if (lk !== hot.lbKey) {
+    $('lbbar').querySelectorAll('i').forEach((el, i) => {
+      const f = Math.max(0, Math.min(1, sim.lb - i));
+      el.firstChild.style.width = (f * 100).toFixed(0) + '%'; el.classList.toggle('full', f >= 1);
+    });
+    hot.lbKey = lk;
+  }
 }
 
 let lastCastHtml = '', lastFeedHtml = '', lastNextHtml = '', lastMyHtml = '', lastBanner = '', lastFlash = null;
@@ -763,12 +903,14 @@ function updateHud() {
   if (mw !== hud.meHw) { $('me-hp').style.width = mw; hud.meHw = mw; }
   if (mc !== hud.meHc) { $('me-hp').style.background = mc; hud.meHc = mc; }
   const meSt = pc.alive ? 'a' : pc.planned ? 'p' : 'd';
-  if (meSt !== hud.me) { $('me').classList.toggle('dead', !pc.alive); $('me-name').textContent = ROLES[pc.slot].name + (pc.alive ? '' : pc.planned ? '（倒地・等復活）' : '（陣亡）'); hud.me = meSt; }
-  // 自殺流：接受復活按鈕
+  if (meSt !== hud.me) { $('me').classList.toggle('dead', !pc.alive); $('me-name').textContent = ROLES[pc.slot].name + (pc.alive ? '' : pc.planned || sim.keepGoing ? '（倒地・等復活）' : '（陣亡）'); hud.me = meSt; }
+  // 接受復活按鈕（自殺流的計畫倒地另外提示起身時機）
   const canRaise = S.phase === 'running' && !pc.alive && !!pc.raise;
-  const rh = canRaise ? (pc.slot === 6 && sim.t > 60 ? '收到 C 的復活：馬上起身' : sim.t < 50.2 ? '先別起身：等三顆石牢形成（0:50 之後）' : sim.t <= 55.5 ? '現在可以起身（三牢已形成，踩地板前）' : '踩地板開始了，盡快起身') : '';
+  const rh = !canRaise ? '' : !pc.planned ? `${ROLES[pc.raise.by].key} 復活了你：起身後 5 秒無敵`
+    : pc.slot === 6 && sim.t > 60 ? '收到 C 的復活：馬上起身' : sim.t < 50.2 ? '先別起身：等三顆石牢形成（0:50 之後）' : sim.t <= 55.5 ? '現在可以起身（三牢已形成，踩地板前）' : '踩地板開始了，盡快起身';
   if (canRaise !== hud.raise) { $('raise').classList.toggle('show', canRaise); hud.raise = canRaise; }
-  if (rh !== hud.raiseHint) { $('raise-hint').textContent = S.mode === 'guide' ? rh : ''; hud.raiseHint = rh; }
+  if (rh !== hud.raiseHint) { $('raise-hint').textContent = S.mode === 'guide' || !pc.planned ? rh : ''; hud.raiseHint = rh; }
+  updateHotbar(sim);
   const my = pc.alive ? myStatusHtml(sim.statusesOf(pc), sim.t) : '';
   if (my !== lastMyHtml) { $('mystatus').innerHTML = my; lastMyHtml = my; }
   // 隊友
@@ -779,8 +921,14 @@ function updateHud() {
     const hw = (c.alive ? Math.round(c.hp) : 0) + '%', hc = c.hp > 50 ? '' : c.hp > 25 ? '#e6c84a' : '#e5584d';
     if (hw !== row.hw) { row.hp.style.width = hw; row.hw = hw; }
     if (hc !== row.hc) { row.hp.style.background = hc; row.hc = hc; }
-    const html = c.alive ? statusIcons(sim.statusesOf(c), sim.t) : `<span class="dead-x">${c.planned ? (c.raise ? '倒地・已收到復活' : '倒地') : '陣亡'}</span>`;
+    const html = c.alive ? statusIcons(sim.statusesOf(c), sim.t) : deadHtml(sim, c);
     if (html !== row.html) { row.st.innerHTML = html; row.html = html; }
+    const k = c.cast, ck = k ? `${k.id}|${Math.min(1, (sim.t - k.t0) / (k.t1 - k.t0)).toFixed(2)}` : '';
+    if (ck !== row.cbKey) {
+      row.cb.classList.toggle('on', !!k); row.cb.classList.toggle('raise', !!k && k.id === 'raise');
+      if (k) row.cbi.style.width = (Math.min(1, (sim.t - k.t0) / (k.t1 - k.t0)) * 100).toFixed(0) + '%';
+      row.cbKey = ck;
+    }
   });
 
   let ch_html = '';
@@ -796,16 +944,20 @@ function updateHud() {
   const fh = lines.map((f) => `<div class="${f.slot === sim.playerSlot ? 'me' : ''}${/死亡/.test(f.text) ? ' bad' : ''}">${f.text}</div>`).join('');
   if (fh !== lastFeedHtml) { $('feed').innerHTML = fh; lastFeedHtml = fh; }
 
-  if (assist) {
+  if (assist || !pc.alive) {
     const cur = sim.guide.cur, pc = sim.pc;
-    if (!pc.alive && pc.planned) {   // 自殺流倒地中
+    if (!pc.alive && !pc.planned) {   // 繼續打：倒地等復活
+      $('g-title').textContent = sim.keepGoing ? '倒地：等待復活' : '陣亡';
+      $('g-tip').textContent = !sim.keepGoing ? '' : pc.raise ? `${ROLES[pc.raise.by].key} 已經復活你：按 F（或畫面上的按鈕）起身，起身後 5 秒無敵，先回到自己的位置。`
+        : '等補師／C 復活你（AI 補師會自動救人）。可以看看隊友的處理。';
+    } else if (!pc.alive && pc.planned) {   // 自殺流倒地中
       $('g-title').textContent = '倒地（照自殺流）：等待復活';
       $('g-tip').textContent = pc.raise
         ? `${ROLES[pc.raise.by].key} 已經復活你。${pc.slot === 6 ? '收到就按 F 起身，回到人群。' : '三顆石牢形成後（0:50）～開始踩地板前（0:55）按 F 起身，起身後先普通移動到泰坦旁集合。'}`
         : '照分配等隊友復活（H1→OT、H2→M1、C→M2、C 10 秒詠唱→R）；收到後先別起身。';
     } else {
       $('g-title').textContent = cur ? `${cur.title}${cur.frame ? '（攻略 ' + cur.frame + '）' : ''}` : '準備';
-      $('g-tip').textContent = cur ? (cur.tip || '') : '按 Space 開始。黃色虛線圈是建議站位。';
+      $('g-tip').textContent = cur ? (cur.tip || '') : '按 Space 開始。黃色虛線圈是建議站位；1～7 使用技能。';
     }
     let nh = '';
     const nx = sim.guide.next;
@@ -831,8 +983,25 @@ function updateHud() {
   if (bh !== lastBanner) { $('banner').innerHTML = bh; lastBanner = bh; }
 }
 
+/** 結算的技能區：GCD 使用率、死刑／大範圍攻擊的減傷時機、倒地與復活、極限技。 */
+function skillHtml(k) {
+  const li = [];
+  const cnt = (a) => a.filter((x) => x.ok).length;
+  if (k.uptime !== null) li.push(`<li class="info">GCD 使用率 ${k.uptime}%${k.interrupts ? `（讀條被打斷 ${k.interrupts} 次）` : ''}</li>`);
+  else if (k.interrupts) li.push(`<li class="info">讀條被打斷 ${k.interrupts} 次</li>`);
+  if (k.busters.length) {
+    const miss = k.busters.filter((x) => !x.ok).map((x) => `${fmtTime(x.t)} ${x.name.replace(/（.*/, '')}`);
+    li.push(`<li class="${miss.length ? 'no' : ''}">死刑有開減傷／無敵：${cnt(k.busters)}/${k.busters.length}${miss.length ? `（沒開：${miss.join('、')}）` : ''}</li>`);
+  }
+  if (k.raids.length) li.push(`<li class="info">大範圍攻擊有團隊減傷覆蓋（全隊）：${cnt(k.raids)}/${k.raids.length}</li>`);
+  if (k.deaths) li.push(`<li class="no">倒地 ${k.deaths} 次${k.raisedBy.length ? '，被 ' + k.raisedBy.map((r) => `${r.lb ? r.by + ' 的 LB3' : r.by}（${fmtTime(r.t)}）`).join('、') + ' 救起' : ''}</li>`);
+  if (k.raises.length) li.push(`<li class="info">復活了 ${k.raises.map((r) => `${r.who}（${fmtTime(r.t)}）`).join('、')}</li>`);
+  if (k.lb) li.push(`<li class="info">使用極限技 ${k.lb} 次</li>`);
+  return li.length ? '<h5>技能</h5><ul>' + li.join('') + '</ul>' : '';
+}
 function recordHtml(rec, rl, heading) {
   let h = `<h5>${heading}</h5><ul>` + rec.objectives.map((o) => `<li class="${o.ok ? '' : 'no'}">${o.text}</li>`).join('') + '</ul>';
+  if (rec.skills) h += skillHtml(rec.skills);
   if (rec.hits.length) h += '<h5>受到的傷害／失誤</h5><ul>' + rec.hits.map((n) => `<li class="no">${fmtTime(n.t)}　${n.text}</li>`).join('') + '</ul>';
   h += '<h5>本局隨機</h5><p class="note">' + rec.roll.join('<br>') + '</p>';
   return h;
@@ -841,8 +1010,10 @@ function recordHtml(rec, rl, heading) {
 function resultHtml(r, slot) {
   const rl = ROLES[slot];
   let h;
-  if (r.full) h = `<h2 class="${r.ok ? 'ok' : 'bad'}">${r.ok ? `完整體驗通過（${FULL_CHAIN.map(phaseTag).join('→')}）` : `失敗：${r.phaseName}`}</h2><p class="note">總時間 ${fmtTime(r.total)}</p>`;
-  else h = `<h2 class="${r.ok ? 'ok' : 'bad'}">${r.ok ? `成功：${r.phaseName} 通過` : '失敗'}</h2>`;
+  const deaths = r.recs.reduce((n, x) => n + (x.skills ? x.skills.deaths : 0), 0);
+  const dn = r.ok && deaths ? `（你倒地 ${deaths} 次）` : '';
+  if (r.full) h = `<h2 class="${r.ok ? 'ok' : 'bad'}">${r.ok ? `完整體驗通過${dn}（${FULL_CHAIN.map(phaseTag).join('→')}）` : `失敗：${r.phaseName}`}</h2><p class="note">總時間 ${fmtTime(r.total)}</p>`;
+  else h = `<h2 class="${r.ok ? 'ok' : 'bad'}">${r.ok ? `成功：${r.phaseName} 通過${dn}` : '失敗'}</h2>`;
   if (!r.ok && r.fail) {
     const f = r.fail, who = f.slot < 0 ? '隊伍' : (f.slot === slot ? '你（' + rl.key + '）' : '隊友 ' + ROLES[f.slot].key + (netOn() && slotOwner(f.slot) ? `（${escapeHtml(memberName(slotOwner(f.slot)))}）` : ''));
     h += `<p class="why">${r.full ? phaseTag(r.pid) + ' ' : ''}${fmtTime(Math.max(0, f.t))}・${who}：${f.cause}</p>`;
@@ -895,6 +1066,7 @@ function meterFps(now, rawDt) {
 function tick(now) {
   meterFps(now, now - last);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (S.held) trySkill(S.held, false);   // 按住 GCD 鍵：冷卻快好時自動排隊
   if (isGuest()) { guestTick(now, dt); audioTick(); }
   else if (S.phase === 'running' && !document.hidden) {
     S.acc = Math.min(0.25, S.acc + dt * (S.mode === 'guide' && !netOn() ? S.speed : 1));   // 連線時固定 1 倍速
@@ -936,9 +1108,20 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'p') toggleDemo();
   else if (k === 'h') togglePanel();
   else if (k === 'f') acceptRaise();
+  else if (k === 'g') giveUp();
+  else if (/^[1-9]$/.test(k) && +k <= LOADOUT[S.role].length) {   // 技能列
+    e.preventDefault();
+    const id = LOADOUT[S.role][+k - 1];
+    if (!e.repeat) trySkill(id, true);
+    S.held = SKILLS[id].gcd ? id : null;
+  }
 });
-window.addEventListener('keyup', (e) => { S.keys.delete(e.key.toLowerCase()); if (e.key === ' ') e.preventDefault(); });
-window.addEventListener('blur', () => S.keys.clear());
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  S.keys.delete(k); if (e.key === ' ') e.preventDefault();
+  if (/^[1-9]$/.test(k)) S.held = null;
+});
+window.addEventListener('blur', () => { S.keys.clear(); S.held = null; });
 window.addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
 
 // 放標點：點 2D 地圖／小地圖／3D 地面（攔在轉鏡頭之前）
@@ -994,5 +1177,5 @@ syncSide();
 resizeAll();
 requestAnimationFrame(frame);
 
-window.__uwu = { S, N, netConnect, netLeave, wm, setWmTool, useWmTool, acceptRaise, tick, newRun, setView, startPause, toggleDemo, rebuildCp, advanceChain, sfx, get sim() { return S.sim; }, get r3d() { return r3d; }, get r2d() { return r2d; }, readInput };
+window.__uwu = { S, N, netConnect, netLeave, wm, setWmTool, useWmTool, acceptRaise, trySkill, setTarget, giveUp, tick, newRun, setView, startPause, toggleDemo, rebuildCp, advanceChain, sfx, get sim() { return S.sim; }, get r3d() { return r3d; }, get r2d() { return r2d; }, readInput };
 })();

@@ -241,3 +241,43 @@ details ul { padding-left: 18px; margin: 6px 0 0; }
 .camset label input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent2); }
 .camset output { color: #fff; font-variant-numeric: tabular-nums; }
 .camset .btn { margin-top: 10px; }
+/* 技能列（下方中央） */
+#hotbar { position: absolute; bottom: 12px; left: max(50%, 486px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 5px; }
+#slots { display: flex; gap: 4px; pointer-events: auto; }
+.sk { position: relative; width: 46px; height: 46px; border-radius: 9px; background: linear-gradient(#24344d, #172235); border: 1px solid #3b4d6b; color: #e6edf6;
+  padding: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12.5px; box-shadow: 0 3px 10px rgba(0,0,0,.45); }
+.sk:hover { border-color: #6a85b3; }
+.sk .kb { position: absolute; left: 3px; top: 1px; font-size: 10px; color: #9fb0c8; font-weight: 600; }
+.sk .cd { position: absolute; inset: 0; background: conic-gradient(rgba(4,7,12,.74) calc(var(--p, 0) * 360deg), transparent 0); pointer-events: none; }
+.sk .ct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px #000; pointer-events: none; }
+.sk .ct:empty { display: none; }
+.sk.gcd { border-color: #5f7aa6; }
+.sk.lbk { color: #ffd866; }
+.sk.off { opacity: .42; }
+.sk.q { box-shadow: inset 0 0 0 2px var(--accent2); }
+.sk.fl { animation: skfl .3s ease-out; }
+@keyframes skfl { from { background: #ffe58a; color: #0a0f17; } }
+#mycast { width: 230px; background: rgba(12,18,28,.88); border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px 5px; visibility: hidden; }
+#mycast.show { visibility: visible; }
+#mycast span { font-size: 12px; color: #cfe3ff; font-weight: 600; }
+#mycast .bar { height: 6px; background: #223048; border-radius: 4px; overflow: hidden; margin-top: 2px; }
+#mycast .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #4f95ff, #a6e3ff); }
+#mycast.raise .bar i { background: linear-gradient(90deg, #ffb84d, #ffe680); }
+#lbbar { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #ffd866; text-shadow: 0 1px 3px #000; }
+#lbbar i { width: 54px; height: 8px; background: #1a2436; border: 1px solid #3b4d6b; border-radius: 4px; overflow: hidden; display: block; }
+#lbbar i s { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3d8bff, #7fd0ff); }
+#lbbar i.full s { background: linear-gradient(90deg, #ffb84d, #ffe680); box-shadow: 0 0 8px #ffd866; }
+#keys { bottom: 100px; }
+/* 隊伍列表：點選當復活目標、讀條 */
+#party .pm { pointer-events: auto; cursor: pointer; position: relative; border-radius: 6px; padding: 0 2px; }
+#party .pm:hover { background: rgba(90,168,255,.08); }
+#party .pm.tg { box-shadow: 0 0 0 2px var(--accent2); background: rgba(255,216,102,.08); }
+.pm .cb { position: absolute; left: 39px; bottom: 0; width: 58px; height: 3px; border-radius: 2px; background: #223048; overflow: hidden; display: none; }
+.pm .cb.on { display: block; }
+.pm .cb i { display: block; height: 100%; width: 0; background: #7fc4ff; }
+.pm .cb.raise i { background: #ffd866; }
+.pm .rz { color: var(--accent2); font-weight: 700; }
+/* 放棄（繼續打模式進行中才顯示） */
+#b-giveup { display: none; grid-column: 1 / -1; padding: 6px 4px; }
+#app.can-giveup #b-giveup { display: block; }
+#overlay li.info::before { content: "•"; color: var(--blue); }

@@ -285,7 +285,8 @@ class Renderer2D {
         const c = sim.chars[f.slot];
         if (o.solo && f.slot !== sim.playerSlot) continue;
         const age = t - f.t;
-        ctx.fillStyle = `rgba(255,130,115,${1 - age / 1.2})`;
+        const fa = 1 - age / 1.2;
+        ctx.fillStyle = f.lb ? `rgba(255,216,102,${fa})` : f.text === '中斷' ? `rgba(190,215,255,${fa})` : `rgba(255,130,115,${fa})`;
         const cp = this.ip(c);
         ctx.fillText(f.text, X(cp.x), Z(cp.z) - 1.8 * scale - age * 18);
       }
@@ -490,6 +491,13 @@ class Renderer2D {
       ctx.fillStyle = '#5a5f68'; ctx.beginPath(); ctx.arc(px, pz, r * 0.85, 0, PI * 2); ctx.fill();
       ctx.strokeStyle = '#ff6b5e'; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.moveTo(px - r * 0.6, pz - r * 0.6); ctx.lineTo(px + r * 0.6, pz + r * 0.6); ctx.moveTo(px + r * 0.6, pz - r * 0.6); ctx.lineTo(px - r * 0.6, pz + r * 0.6); ctx.stroke();
+      // 有人正在救／已收到復活：金色光圈與 ✚
+      const saving = sim.chars.some((x) => x.cast && x.cast.id === 'raise' && x.cast.tg === c.slot);
+      if ((c.raise || saving) && !o.mini) {
+        ctx.strokeStyle = `rgba(255,216,102,${c.raise ? 0.9 : 0.45 + 0.35 * Math.sin(tsec * 8)})`; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(px, pz, r + 4, 0, PI * 2); ctx.stroke();
+        if (c.raise) { ctx.fillStyle = '#ffd866'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText('✚', px, pz - r - 6); }
+      }
       ctx.globalAlpha = 1;
       return;
     }
@@ -511,6 +519,12 @@ class Renderer2D {
     if (o.mini) return;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(px - r, pz + r + 3, r * 2, 4);
     ctx.fillStyle = c.hp > 50 ? '#52d17c' : c.hp > 25 ? '#e6c84a' : '#e5584d'; ctx.fillRect(px - r, pz + r + 3, r * 2 * (c.hp / 100), 4);
+    // 讀條（藍：攻擊；金：復活）
+    if (c.cast) {
+      const k = c.cast, p = Math.max(0, Math.min(1, (sim.t - k.t0) / (k.t1 - k.t0)));
+      ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(px - r, pz + r + 9, r * 2, 4);
+      ctx.fillStyle = k.id === 'raise' ? '#ffd866' : '#7fc4ff'; ctx.fillRect(px - r, pz + r + 9, r * 2 * p, 4);
+    }
     // 狀態光環
     for (const s of sim.statusesOf(c)) {
       if (s.id === 'searing') { ctx.strokeStyle = `rgba(255,120,40,${0.6 + 0.3 * Math.sin(tsec * 8)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(px, pz, r + 3, 0, PI * 2); ctx.stroke(); }

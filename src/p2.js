@@ -78,7 +78,7 @@ function build(S) {
   const ifrit = s.ifrit;
   const plan = runPlan(R);
   const ESPOT = (b) => atBearing(b, K.EDGE_R);
-  const faceTank = () => { const c = S.chars[s.tank]; ifrit.rot = Math.atan2(c.pos.x - ifrit.pos.x, c.pos.z - ifrit.pos.z); };
+  const faceTank = () => { const c = S.mainTank(); ifrit.rot = Math.atan2(c.pos.x - ifrit.pos.x, c.pos.z - ifrit.pos.z); };   // 拉怪坦克倒地 → 面向另一位坦克
   s.faceTank = faceTank;
   const HW1 = R.howl1, HW2 = R.howl2;
 
@@ -92,13 +92,14 @@ function build(S) {
     });
   };
 
-  const incinerate = (t) => S.hazard({
-    t0: t - 1.2, omen: t - 1.2, tRes: t, kind: 'cone', label: 'Incinerate（烈焰焚燒）', tankSafe: true, tankDmg: 40,
-    geom: () => { faceTank(); return { x: ifrit.pos.x, z: ifrit.pos.z, rot: ifrit.rot, half: K.INC_HALF, len: K.INC_LEN }; },
-    follow: (f) => { const c = S.chars[s.tank]; f.x = ifrit.pos.x; f.z = ifrit.pos.z; f.rot = Math.atan2(c.pos.x - ifrit.pos.x, c.pos.z - ifrit.pos.z); },
+  // 扇形的對象在讀條開始時就鎖定（讀條中坦克倒地也不會轉向別人）
+  const incinerate = (t) => { let tg = null; return S.hazard({
+    t0: t - 1.2, omen: t - 1.2, tRes: t, kind: 'cone', label: 'Incinerate（烈焰焚燒）', tankSafe: true, tankDmg: 40, buster: true,
+    geom: () => { tg = S.mainTank(); faceTank(); return { x: ifrit.pos.x, z: ifrit.pos.z, rot: ifrit.rot, half: K.INC_HALF, len: K.INC_LEN }; },
+    follow: (f) => { f.x = ifrit.pos.x; f.z = ifrit.pos.z; f.rot = Math.atan2(tg.pos.x - ifrit.pos.x, tg.pos.z - ifrit.pos.z); },
     castBy: ['伊弗利特', 'Incinerate', 1.2],
     killMsg: '被 Incinerate（伊弗利特正面扇形）擊中：非坦克不能站正面',
-  });
+  }); };
 
   const searingPulse = (slotFn, t) => {
     S.hazard({
@@ -118,10 +119,15 @@ function build(S) {
     });
   };
   const howl = (slotFn, tCast, tOn, dur, pulses) => {
+    let who = slotFn();
+    const cur = () => who;
     at(tCast, () => { S.cast('伊弗利特', 'Inferno Howl（灼熱咆哮）', tCast, 1.7); });
-    at(tOn, () => { const h = S.chars[slotFn()]; h.searing = true; S.addStatus(h.slot, 'searing', dur); S.log(`${h.key} 被點名灼熱咆哮：遠離人群`, h.slot); });
-    at(tOn + dur, () => { S.chars[slotFn()].searing = false; });
-    for (const p of pulses) searingPulse(slotFn, p);
+    at(tOn, () => {
+      who = S.pickAlive(slotFn(), [H1, H2, M1, M2, RR, CC]);   // 預定的補師倒地 → 點下一個活著的人
+      const h = S.chars[who]; h.searing = true; S.addStatus(h.slot, 'searing', dur); S.log(`${h.key} 被點名灼熱咆哮：遠離人群`, h.slot);
+    });
+    at(tOn + dur, () => { S.chars[who].searing = false; });
+    for (const p of pulses) searingPulse(cur, p);
   };
 
   // 地火噴發：以「距離伊弗利特最遠的 2 名無熱風玩家」為落點，連續 4 輪
@@ -156,9 +162,10 @@ function build(S) {
   };
 
   // 烈焰碎擊：分攤後掛詛咒之炎 DOT（每 3 秒一跳），持續時間依人數：≥6 人 2 秒（不跳）、5 人 4 秒（跳 1 次）、<5 人 30 秒（致死）
-  const crush = (slot, tMark, tRes) => {
-    let stack = [];
+  const crush = (slot0, tMark, tRes) => {
+    let stack = [], slot = slot0;
     at(tMark, () => {
+      slot = S.pickAlive(slot0, [M1, M2, RR, CC, H1, H2]);
       S.mark(slot, 'crush', tMark, tRes);
       const fx = S.addFx({ kind: 'circle', r: K.CRUSH_R, t0: tMark, t1: tRes, label: 'Flaming Crush（烈焰碎擊）', tint: 'share', assistFrom: tMark });
       fx.follow = (f) => { const c = S.chars[slot]; f.x = c.pos.x; f.z = c.pos.z; };
@@ -210,7 +217,7 @@ function build(S) {
   at(10.15, () => { ifrit.pos.x = 0; ifrit.pos.z = 0; ifrit.rot = 0; });
   at(10.24, () => { ifrit.visible = true; });
   at(12.29, () => { ifrit.targetable = true; });
-  at(12.38, () => S.cast('伊弗利特', 'Hellfire（地獄之火炎）', 12.38, 2.7));
+  at(12.38, () => { S.cast('伊弗利特', 'Hellfire（地獄之火炎）', 12.38, 2.7); S.expect('raid', 15.37); });
   at(15.37, () => S.raidwide('Hellfire', 65, 25));
   at(23.56, () => S.raidwide('Vulcan Burst（火神爆裂，擊退視為已用群盾擋下）', 15));
   incinerate(26.38); incinerate(29.50); incinerate(33.60);
@@ -250,7 +257,7 @@ function build(S) {
   // ---------------------------------------------------------------- 時間軸：覺醒後
   at(75.25, () => { ifrit.pos.x = 0; ifrit.pos.z = 0; ifrit.rot = 0; });
   at(75.30, () => { ifrit.visible = true; ifrit.targetable = true; });
-  at(75.38, () => S.cast('伊弗利特', 'Hellfire（地獄之火炎）', 75.38, 2.7));
+  at(75.38, () => { S.cast('伊弗利特', 'Hellfire（地獄之火炎）', 75.38, 2.7); S.expect('raid', 78.37); });
   at(78.37, () => S.raidwide('Hellfire', 65, 25));
   at(79.5, () => { const p = rot([-9.7, 9.4], R.rotB); ifrit.moveTo(p[0], p[1], 4); });
   howl(() => HW2, 84.74, 86.70, 30.9, [92.68, 98.69, 104.70, 110.72, 116.74]);
@@ -525,6 +532,7 @@ const ROLE_DESC = [
 
 PHASES.p2 = {
   id: 'p2', name: 'P2 伊弗利特', short: '伊弗利特', preRoll: -3, end: K.END, maxCharges: K.CHARGES, chargeLabel: '覺醒',
+  bossLook: 'ifrit', bossR: 3.5, activeTank: (S) => S.s.tank,
   checkpoints: CHECKPOINTS, cues: CUES, roleDesc: ROLE_DESC,
   roll, setup, build, tick, objectives,
   start: () => { const a = fp('P2A-F01'); a[MT] = [0.3, -0.3]; return a; },

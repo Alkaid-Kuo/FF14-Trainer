@@ -23,7 +23,22 @@ const STATUS_DEF = {
   gaol: { name: '花崗石牢（拘束・無敵）', icon: '牢', color: '#a07850' },
   stun: { name: '暈眩', icon: '暈', color: '#e0c050' },
   transcendent: { name: '復活無敵', icon: '無', color: '#f5e27a' },
+  weak: { name: '衰弱（復活後）', icon: '衰', color: '#9aa3b5' },
+  // 技能
+  swift: { name: '即刻詠唱', icon: '即', color: '#c58cff' },
+  sprint: { name: '衝刺', icon: '衝', color: '#6fd3ff' },
+  antikb: { name: '防擊退', icon: '穩', color: '#e8e8e8' },
+  mit: { name: '減傷', icon: '盾', color: '#6fa8ff' },
+  invuln: { name: '無敵', icon: '敵', color: '#ffe066' },
+  reprisal: { name: '雪仇（團隊減傷）', icon: '雪', color: '#ff8a6b' },
+  pmit: { name: '群體減傷（補師）', icon: '團', color: '#7be08a' },
+  troub: { name: '團隊減傷（遠程）', icon: '團', color: '#ff8fbf' },
+  feint: { name: '牽制（團隊減傷）', icon: '牽', color: '#ff9a6b' },
+  addle: { name: '昏亂（團隊減傷）', icon: '昏', color: '#b98cff' },
+  lbtank: { name: '坦克極限技（全隊減傷）', icon: '極', color: '#ffd24a' },
 };
+/** 團隊減傷類狀態（大範圍攻擊時有沒有覆蓋）。 */
+const PARTY_MIT = ['reprisal', 'pmit', 'troub', 'feint', 'addle', 'lbtank'];
 
 const ROLES = [
   { slot: 0, key: 'MT', name: '主坦 MT', kind: 'tank', color: '#4f8dff' },
@@ -36,6 +51,9 @@ const ROLES = [
   { slot: 7, key: 'C', name: '法系 C', kind: 'dps', color: '#b27bff' },
 ];
 const MT = 0, OT = 1, H1 = 2, H2 = 3, M1 = 4, M2 = 5, RR = 6, CC = 7;
+/** 仇恨順序：坦克倒地時 Boss 改打下一個活著的人。 */
+const ENMITY = [MT, OT, M1, M2, RR, CC, H1, H2];
+const NON_TANKS = [H1, H2, M1, M2, RR, CC];
 
 /** 場地標點（攻略標準：A/B/C/D 在正點、1 號位在中心）。顏色照 FF14：A/1 紅、B/2 黃、C/3 藍、D/4 紫。 */
 const WM_COLOR = { A: '#ff4d4d', B: '#ffd23f', C: '#4da6ff', D: '#c46bff', 1: '#ff4d4d', 2: '#ffd23f', 3: '#4da6ff', 4: '#c46bff' };
@@ -127,17 +145,20 @@ class Actor {
 const PHASES = {};
 
 class Sim {
-  /** opts: { phase, seed, playerSlot, autoPlayer, stopOnDeath, startPos?, preRoll?, variant?, remote? }
+  /** opts: { phase, seed, playerSlot, autoPlayer, stopOnDeath, onDeath?, startPos?, preRoll?, variant?, remote?, dead?, lb?, carry? }
       startPos / preRoll：完整體驗模式接續上一階段時，沿用上一階段結束時的位置，preRoll 0＝無倒數直接開始。
       variant：打法（例如 P3 的 'regular' / 'suicide'）。
-      remote：連線時其他真人玩家的職位（位置由網路傳來，不由 AI 控制）。 */
+      remote：連線時其他真人玩家的職位（位置由網路傳來，不由 AI 控制）。
+      onDeath：'stop'（預設，有人死亡就失敗）或 'continue'（繼續打：倒地可以復活，真人全倒地才結束）。
+      dead / lb / carry：完整體驗接續上一階段的倒地者、極限技量表、技能冷卻。 */
   constructor(opts) {
     this.phase = PHASES[opts.phase || 'p1'];
     this.seed = opts.seed >>> 0;
     this.variant = opts.variant || null;
     this.playerSlot = opts.playerSlot;
     this.humans = new Set([this.playerSlot].concat(opts.remote || []));   // 真人控制的職位（受傷紀錄、結算都算他們）
-    this.stopOnDeath = opts.stopOnDeath !== false;
+    this.keepGoing = opts.onDeath === 'continue';
+    this.stopOnDeath = !this.keepGoing && opts.stopOnDeath !== false;
     this.t = opts.preRoll === undefined ? this.phase.preRoll : opts.preRoll;   // 倒數秒數（負值）
     this.t0 = this.t;
     this.status = 'running';          // running | failed | cleared
@@ -155,6 +176,8 @@ class Sim {
     this.edgeMsg = '碰到場地邊緣：墜落死亡';
     this.avoid = [];                   // 隊友 AI 走路時會繞開的圓（污泥等）：{ x, z, r, t0, t1 }
     this.input = { x: 0, z: 0 };
+    this.lastMove = null;              // 最近一次的走位（倒地者起身、坦克接手時用）
+    this.tankSwap = null;              // 倒地過的坦克：另一位坦克接手拉怪，直到下一次走位時他已起身
     this.guides = ROLES.map(() => ({ cur: null, next: null }));   // 每個職位各自的教學指引（連線時每人看自己的）
     this.s = {};                       // 階段自訂狀態
     this.roll = this.phase.roll(this.seed);
@@ -163,13 +186,15 @@ class Sim {
     this.chars = ROLES.map((r) => ({
       slot: r.slot, key: r.key, kind: r.kind,
       pos: { x: start[r.slot][0], z: start[r.slot][1] }, prev: { x: start[r.slot][0], z: start[r.slot][1] }, rot: PI, prevRot: PI,
-      goal: null, goalAt: 0, auto: r.slot !== this.playerSlot || !!opts.autoPlayer,
+      goal: null, goalAt: 0, auto: r.slot === this.playerSlot ? !!opts.autoPlayer : !(opts.remote || []).includes(r.slot),   // 連線的隊員不是 AI
       alive: true, hp: 100, thermal: 0, searing: false, dwell: 0, deathCause: null,
-      kb: null, kbSeq: 0, fell: false, walk: 0, stunUntil: 0, invulnUntil: 0, planned: false, raise: null,
-      remote: (opts.remote || []).includes(r.slot), net: null,
-      stats: { damage: 0 },
+      kb: null, kbSeq: 0, fell: false, walk: 0, stunUntil: 0, invulnUntil: 0, planned: false, plannedUntil: 0, raise: null, deadAt: 0,
+      remote: (opts.remote || []).includes(r.slot), net: null, netMoveT: -99,
+      cast: null, gcdUntil: 0, cd: {}, queued: null,
+      stats: { damage: 0, deaths: 0, raisedBy: [], raises: [], busters: [], busy: 0, upT: 0, interrupts: 0, used: {} },
     }));
     this.pc = this.chars[this.playerSlot];
+    this.initSkills(opts);
 
     this.phase.setup(this);
     this.phase.build(this);
@@ -177,6 +202,10 @@ class Sim {
       this.move(this.t + 0.01, 'transit', '轉場：移到本階段起始位置', () => (this.phase.transitSpots ? this.phase.transitSpots(this) : this.phase.start(this.roll)), {
         preview: false, tip: () => `${this.phase.name} 已經開始：移到起始位置（黃圈）。`,
       });
+    }
+    for (const slot of opts.dead || []) {   // 完整體驗：上一階段倒地的人維持倒地
+      const c = this.chars[slot];
+      c.alive = false; c.deathCause = '上一階段倒地'; c.deadAt = this.t;
     }
     this.events.sort((a, b) => a.t - b.t || a.seq - b.seq);
     this.moves.sort((a, b) => a.t - b.t);
@@ -205,23 +234,72 @@ class Sim {
   despawn(a) { if (!a) return; a.dead = true; a.visible = false; }
   alive() { return this.chars.filter((c) => c.alive); }
 
-  /** 死亡。opt.planned：打法內的計畫死亡（自殺流），不算失敗；opt.force：無視無敵（場地邊緣、危險區域）。 */
+  /** 死亡。opt.planned：打法內的計畫死亡（自殺流），不算失敗（opt.until：預計被救起的期限）；opt.force：無視無敵（場地邊緣、危險區域）。 */
   kill(c, cause, opt) {
     if (!c.alive) return;
     const o = opt || {};
     if (!o.force && this.t < c.invulnUntil) return;
-    c.alive = false; c.deathCause = cause; c.goal = null; c.planned = !!o.planned;
+    c.alive = false; c.deathCause = cause; c.goal = null; c.planned = !!o.planned; c.plannedUntil = o.until || 0; c.deadAt = this.t;
+    // 死亡時身上的狀態全部消失、讀條中斷
+    c.thermal = 0; c.searing = false; c.cast = null; c.queued = null; c.raise = null;
+    this.statuses = this.statuses.filter((s) => s.slot !== c.slot);
+    if (isTank(c.slot)) { this.tankSwap = c.slot; this.retarget(this.chars[c.slot === MT ? OT : MT]); }   // 另一位坦克馬上接手
     if (o.planned) { this.log(`${c.key} 死亡（照打法）：${cause}`, c.slot); return; }
+    c.stats.deaths++;
     this.notes.push({ t: this.t, type: 'death', text: cause, slot: c.slot });
     this.log(`${c.key} 死亡：${cause}`, c.slot);
+    if (this.keepGoing) return;   // 繼續打：倒地等復活
     if (!this.failure) this.failure = { t: this.t, slot: c.slot, cause };
     if (this.stopOnDeath && this.status === 'running') this.status = 'failed';
   }
-  /** 復活（接受復活後在屍體位置起身）。 */
-  revive(c, hp) {
-    c.alive = true; c.planned = false; c.deathCause = null; c.hp = hp; c.raise = null; c.kb = null; c.goal = null;
-    this.log(`${c.key} 接受復活`, c.slot);
+  /** 打法失誤（不是死亡，例如自殺流沒倒地、起身時機錯）：立即重來模式判失敗，繼續打模式只記錄。 */
+  mistake(slot, cause) {
+    if (this.status !== 'running') return;
+    if (this.keepGoing) { this.note('hit', cause, slot); this.log(cause, slot); return; }
+    this.failure = this.failure || { t: this.t, slot, cause };
+    this.note('death', cause, slot);
+    this.status = 'failed';
   }
+  /** 計畫倒地中（自殺流等人來救，期限內不算「倒地」）。 */
+  waitingPlan(c) { return !c.alive && c.planned && this.t < c.plannedUntil; }
+  /** 復活（接受復活後在屍體位置起身；屍體在場外就移回場內）。 */
+  revive(c, hp, quiet) {
+    c.alive = true; c.planned = false; c.deathCause = null; c.hp = hp; c.raise = null; c.kb = null; c.goal = null; c.fell = false;
+    const r = Math.hypot(c.pos.x, c.pos.z), lim = this.edgeR - 1.5;
+    if (r > lim) { c.pos.x *= lim / r; c.pos.z *= lim / r; c.prev.x = c.pos.x; c.prev.z = c.pos.z; }
+    if (!quiet) this.log(`${c.key} 接受復活`, c.slot);
+    this.retarget(c);
+  }
+  /** 立刻走向目前這一步的站位（起身、坦克接手時）；真人只更新教學指引。 */
+  retarget(c) {
+    const mv = this.lastMove;
+    if (!mv || !c.alive) return;
+    const spots0 = mv.spots(this), spots = mv.noSwap ? spots0 : this.swapTanks(spots0), sp = spots[c.slot];
+    if (!sp) return;
+    if (this.humans.has(c.slot)) this.guides[c.slot].cur = { id: mv.id, title: mv.title, t: mv.t, spot: { x: sp[0], z: sp[1] }, tip: this.swapNote(c.slot, spots0, spots) + (mv.tip ? mv.tip(c.slot, this) : ''), frame: mv.frame };
+    if (c.auto) { c.goal = { x: sp[0], z: sp[1] }; c.goalAt = this.t; }
+  }
+  /** 點名對象：預定的人倒地時改點 pool 裡下一個活著的人（遊戲不會點到倒地的人）。 */
+  pickAlive(slot, pool) {
+    if (this.chars[slot].alive) return slot;
+    const p = pool || NON_TANKS, i = Math.max(0, p.indexOf(slot));
+    for (let k = 1; k <= p.length; k++) { const s = p[(i + k) % p.length]; if (this.chars[s].alive) return s; }
+    const any = ENMITY.find((s) => this.chars[s].alive);
+    return any === undefined ? slot : any;
+  }
+  /** 仇恨：預定拉怪的坦克（slot）倒地時，Boss 改打另一位坦克，再來依仇恨順序。 */
+  tankFor(slot) {
+    const other = slot === MT ? OT : MT;
+    if (this.chars[slot].alive && !(this.tankSwap === slot && this.chars[other].alive)) return slot;
+    if (this.chars[other].alive) return other;
+    const any = ENMITY.find((s) => this.chars[s].alive);
+    return any === undefined ? slot : any;
+  }
+  mainTank(slot) { return this.chars[this.tankFor(slot === undefined ? (this.phase.activeTank ? this.phase.activeTank(this) : MT) : slot)]; }
+  hasStatus(slot, id) { return this.statuses.some((s) => s.slot === slot && s.id === id && this.t >= s.t0 && (s.t1 === null || this.t <= s.t1)); }
+  partyMitOn() { return this.statuses.some((s) => PARTY_MIT.includes(s.id) && this.t >= s.t0 && (s.t1 === null || this.t <= s.t1)); }
+  /** 大範圍攻擊紀錄（結算：有沒有團隊減傷覆蓋）；小傷害（例如怒震每一下）不記。 */
+  recordRaid(name, pct) { if (pct >= 20) this.raids.push({ t: this.t, name, mit: this.partyMitOn() }); }
   damage(c, pct, why, quiet) {
     if (!c.alive) return;
     c.hp = Math.max(1, c.hp - pct);
@@ -232,6 +310,7 @@ class Sim {
   sound(name) { this.sounds.push({ t: this.t, name }); }
   raidwide(name, pct, tankPct) {
     this.log(`${name} 全體攻擊`);
+    this.recordRaid(name, pct);
     this.screenFx.push({ t: this.t, type: 'raidwide', power: pct >= 40 ? 1 : 0.6 });
     for (const c of this.chars) if (c.alive) this.damage(c, isTank(c.slot) && tankPct !== undefined ? tankPct : pct, name);
   }
@@ -243,6 +322,7 @@ class Sim {
   hazard(o) {
     const tRes = o.tRes, snap = o.snap === undefined ? tRes : o.snap;
     let fx = null, hit = [];
+    if (o.buster) this.at(o.t0, () => this.expect('buster', tRes, o.label));
     this.at(o.t0, () => {
       const g = typeof o.geom === 'function' ? o.geom() : o.geom;
       fx = this.addFx(Object.assign({ t1: tRes, label: o.label || '', tint: o.tint || 'danger', assistFrom: o.assistFrom }, g, { kind: o.kind, t0: o.omen === undefined ? o.t0 : o.omen }));
@@ -264,7 +344,10 @@ class Sim {
       if (o.onResolve) o.onResolve(list, fx);
       if (o.noKill) return;
       for (const c of list) {
-        if (o.tankSafe && isTank(c.slot)) { this.damage(c, o.tankDmg || 45, o.label, o.quiet); c.stats.tankHits = (c.stats.tankHits || 0) + 1; continue; }
+        if (o.tankSafe && isTank(c.slot)) {
+          if (o.buster) c.stats.busters.push({ t: this.t, name: o.label, ok: ['mit', 'invuln', 'lbtank'].some((id) => this.hasStatus(c.slot, id)) });
+          this.damage(c, o.tankDmg || 45, o.label, o.quiet); c.stats.tankHits = (c.stats.tankHits || 0) + 1; continue;
+        }
         this.kill(c, o.killMsg || `被 ${o.label} 擊中`);
       }
     });
@@ -285,29 +368,41 @@ class Sim {
     if (c.thermal) out.push({ id: 'thermal', t1: null, stacks: c.thermal });
     return out;
   }
-  /** 往固定方向 (ux, uz) 擊退 distance。 */
+  /** 往固定方向 (ux, uz) 擊退 distance。開著防擊退的活人不會被擊退（回傳 false）。 */
   knockVec(c, ux, uz, distance, dur) {
+    if (c.alive && this.hasStatus(c.slot, 'antikb')) return false;
     c.kb = { vx: ux * distance / dur, vz: uz * distance / dur, t0: this.t, until: this.t + dur, seq: ++c.kbSeq };
     c.goal = null;
+    return true;
   }
   /** 擊退：從 from 往外推 distance（屍體也會被擊飛）。 */
   knock(c, from, distance, dur) {
     const dx = c.pos.x - from.x, dz = c.pos.z - from.z, d = Math.hypot(dx, dz) || 1;
-    c.kb = { vx: dx / d * distance / dur, vz: dz / d * distance / dur, t0: this.t, until: this.t + dur, seq: ++c.kbSeq };
-    c.goal = null;
+    return this.knockVec(c, dx / d, dz / d, distance, dur);
   }
 
   // ---------------------------------------------------------------- 隊友 AI
   move(t, id, title, spots, opt) {
-    this.moves.push(Object.assign({ t, id, title, spots, jitter: true, preview: true, spread: false, tip: null, frame: '' }, opt || {}));
+    this.moves.push(Object.assign({ t, id, title, spots, jitter: true, preview: true, spread: false, tip: null, frame: '', noSwap: false }, opt || {}));
   }
+  /** 拉怪的坦克倒地：另一位坦克接手他的站位（兩人站位對調，起身的坦克先站另一位的位置；站位表 spots 依職位排列）。 */
+  swapTanks(spots) {
+    const at = this.phase.activeTank ? this.phase.activeTank(this) : MT, other = at === MT ? OT : MT;
+    if ((this.chars[at].alive && this.tankSwap !== at) || !this.chars[other].alive || !spots[at]) return spots;
+    const a = spots.slice(); a[other] = spots[at]; a[at] = spots[other];
+    return a;
+  }
+  /** 接手站位時的教學提示前綴。 */
+  swapNote(slot, spots0, spots) { return spots0[slot] !== spots[slot] ? `（${ROLES[slot === MT ? OT : MT].key} 倒地，由你接手他的站位）` : ''; }
   runMove(mv) {
-    const spots = mv.spots(this);
+    this.lastMove = mv;
+    if (this.tankSwap !== null && this.chars[this.tankSwap].alive) this.tankSwap = null;   // 倒地的坦克已起身：回到原本的分工
+    const spots0 = mv.spots(this), spots = mv.noSwap ? spots0 : this.swapTanks(spots0);
     for (const c of this.chars) {
       const sp = spots[c.slot];
       if (!sp) continue;
       if (this.humans.has(c.slot)) {
-        this.guides[c.slot].cur = { id: mv.id, title: mv.title, t: mv.t, spot: { x: sp[0], z: sp[1] }, tip: mv.tip ? mv.tip(c.slot, this) : '', frame: mv.frame };
+        this.guides[c.slot].cur = { id: mv.id, title: mv.title, t: mv.t, spot: { x: sp[0], z: sp[1] }, tip: this.swapNote(c.slot, spots0, spots) + (mv.tip ? mv.tip(c.slot, this) : ''), frame: mv.frame };
       }
       if (!c.auto || !c.alive) continue;
       let gx = sp[0], gz = sp[1];
@@ -320,7 +415,7 @@ class Sim {
     }
   }
   previewMove(mv) {
-    const spots = mv.spots(this);
+    const spots = mv.noSwap ? mv.spots(this) : this.swapTanks(mv.spots(this));
     for (const slot of this.humans) {
       const sp = spots[slot];
       if (!sp) continue;
@@ -330,7 +425,11 @@ class Sim {
   /** 本機玩家的教學指引。 */
   get guide() { return this.guides[this.playerSlot]; }
   /** 連線：設定遠端真人角色的位置（隊員自己算好的位置）。 */
-  setRemote(slot, x, z, rot) { const c = this.chars[slot]; c.net = { x, z, rot }; }
+  setRemote(slot, x, z, rot) {
+    const c = this.chars[slot];
+    if (c.net && Math.hypot(c.net.x - x, c.net.z - z) > 0.01) c.netMoveT = this.t;   // 讀條中移動要中斷（第一次收到位置不算）
+    c.net = { x, z, rot };
+  }
   /** 連線：某職位改由 AI（斷線、隊員開 AI 代打）或交回遠端真人。 */
   setRemoteAuto(slot, auto) { const c = this.chars[slot]; c.remote = !auto; c.auto = auto; if (!auto) c.goal = null; }
   setPlayerAuto(on) {
@@ -353,7 +452,9 @@ class Sim {
     this.t = t1;
     this.entities(dt);
     if (this.phase.tick) this.phase.tick(this, dt);
+    this.skillStep(dt);
     this.fxStep();
+    this.checkWipe();
   }
 
   entities(dt) {
@@ -386,8 +487,8 @@ class Sim {
       } else if (c.slot === this.playerSlot) {
         const l = Math.hypot(inp.x, inp.z);
         if (l > 0.01) {
-          const k = Math.min(1, l) / l;
-          c.pos.x += inp.x * k * C.SPEED * dt; c.pos.z += inp.z * k * C.SPEED * dt;
+          const k = Math.min(1, l) / l * C.SPEED * this.speedMul(c) * dt;
+          c.pos.x += inp.x * k; c.pos.z += inp.z * k;
           c.rot = Math.atan2(inp.x, inp.z);
         }
       }
@@ -433,11 +534,38 @@ class Sim {
     const keep = this.chars.map((c) => [c.auto, c.remote]);
     for (const c of this.chars) { c.auto = true; c.remote = false; }   // 快轉時真人也交給 AI
     while (this.status === 'running' && this.t < tTarget) this.step(1 / 60);
-    this.chars.forEach((c, i) => { [c.auto, c.remote] = keep[i]; if (!c.auto) c.goal = null; c.net = null; });
+    this.chars.forEach((c, i) => { [c.auto, c.remote] = keep[i]; if (!c.auto) { c.goal = null; c.cast = null; c.queued = null; } c.net = null; });
+    for (const slot of this.humans) Object.assign(this.chars[slot].stats, { busy: 0, upT: 0, interrupts: 0 });   // GCD 使用率只算玩家自己打的部分
+  }
+
+  /** 繼續打模式：真人全部倒地、沒有人正在救（也沒有人能救）就結束。 */
+  checkWipe() {
+    if (!this.keepGoing || this.status !== 'running') return;
+    const hs = [...this.humans].map((s) => this.chars[s]);
+    if (!hs.every((c) => !c.alive && !this.waitingPlan(c))) { this.wipeT = null; return; }
+    if (this.wipeT === null) this.wipeT = this.t;
+    const pending = hs.some((c) => c.raise) || this.chars.some((c) => c.cast && c.cast.id === 'raise' && this.humans.has(c.cast.tg));
+    const raiser = this.chars.some((c) => c.alive && this.canRaise(c.slot));
+    if ((pending || raiser) && this.t - this.wipeT < 25) return;
+    this.status = 'failed';
+    this.failure = { t: this.t, slot: -1, cause: '全員倒地：真人玩家都倒地，沒有人能復活' };
+    this.note('death', this.failure.cause, -1);
+  }
+
+  /** 放棄這一局（房主／單人按「放棄」）。 */
+  giveUp() {
+    if (this.status !== 'running') return;
+    this.status = 'failed';
+    this.failure = { t: this.t, slot: -1, cause: '放棄這一局' };
   }
 
   finishWith(ok, failMsg) {
     if (this.status !== 'running') return;
+    if (!ok && this.keepGoing) {   // 繼續打：沒覺醒也打到最後（結算標 ✗）
+      this.status = 'cleared'; this.softFail = failMsg;
+      this.log(`${this.phase.name} 結束（${failMsg}）`);
+      return;
+    }
     if (ok) { this.status = 'cleared'; this.log(`${this.phase.name} 通過！`); }
     else {
       this.status = 'failed';
@@ -459,9 +587,9 @@ class Sim {
 }
 
 root.UWU = {
-  Sim, Actor, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR, isTank, isHealer, dist, inCone, inRect, inCircle, inRing, segInfo,
+  Sim, Actor, C, ROLES, PHASES, STATUS_DEF, PARTY_MIT, WAYMARKS, WM_COLOR, isTank, isHealer, dist, inCone, inRect, inCircle, inRing, segInfo,
   atBearing, bearingOf, norm360, ipos, irot, rotFromBearing, rotateXZ, mulberry32, hash01, shuffler, angDiff,
-  MT, OT, H1, H2, M1, M2, RR, CC,
+  MT, OT, H1, H2, M1, M2, RR, CC, ENMITY, NON_TANKS,
 };
-if (typeof module !== 'undefined' && module.exports) module.exports = root.UWU;
+if (typeof module !== 'undefined' && module.exports) { require('./skills.js'); module.exports = root.UWU; }
 })(typeof window !== 'undefined' ? window : globalThis);

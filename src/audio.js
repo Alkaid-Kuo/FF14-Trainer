@@ -165,6 +165,15 @@ class Sfx {
         this.noise(0.9, { filter: 'bandpass', freq: 300, freqTo: 2400, q: 0.9, vol: 0.18, attack: 0.3 });
         this.tone(90, 0.5, { vol: 0.15, slideTo: 40 });
         break;
+      case 'skill': this.tone(1046, 0.07, { type: 'triangle', vol: 0.07 }); break;   // 自己用技能
+      case 'raised':     // 收到復活
+        [784, 988, 1319].forEach((f, i) => this.tone(f, 0.35, { type: 'sine', vol: 0.12, delay: i * 0.09 }));
+        break;
+      case 'lb':         // 極限技：上升的和弦＋重擊
+        [262, 330, 392, 523, 659].forEach((f, i) => this.tone(f, 0.6, { type: 'triangle', vol: 0.1, delay: i * 0.05 }));
+        this.noise(1.0, { filter: 'bandpass', freq: 400, freqTo: 3000, q: 0.8, vol: 0.16, attack: 0.2 });
+        this.tone(65, 0.9, { vol: 0.3, slideTo: 30, delay: 0.25 });
+        break;
       default: break;
     }
   }

@@ -2,7 +2,7 @@
    房主的瀏覽器跑模擬；隊員自己的角色在本機移動（含擊退、暈眩），位置送給房主；其他角色依快照內插顯示（約慢 0.1 秒）。 */
 (function (root) {
 'use strict';
-const { ROLES, PHASES, STATUS_DEF, C, angDiff } = root.UWU;
+const { ROLES, PHASES, STATUS_DEF, C, angDiff, SKILL_IDS } = root.UWU;
 const PI = Math.PI;
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -26,7 +26,7 @@ class Link {
 // ---------------------------------------------------------------- 房主：模擬 → 快照
 class Replicator {
   constructor() { this.reset(null); }
-  reset(sim) { this.sim = sim; this.sent = new WeakSet(); this.guideKey = {}; this.zid = new WeakMap(); this.zseq = 0; }
+  reset(sim) { this.sim = sim; this.sent = new WeakSet(); this.guideKey = {}; this.skillKey = {}; this.zid = new WeakMap(); this.zseq = 0; }
   zoneId(z) { if (!this.zid.has(z)) this.zid.set(z, ++this.zseq); return this.zid.get(z); }
   /** full＝把目前所有東西都送出（新進房或換新的一局）；否則只送新出現的東西。 */
   snapshot(sim, full) {
@@ -46,9 +46,12 @@ class Replicator {
       ch: S.chars.map((c) => {
         const kb = c.kb && S.t < c.kb.until ? c.kb : null;
         const flags = (c.alive ? 1 : 0) | (c.planned ? 2 : 0) | (c.raise ? 4 : 0) | (c.fell ? 8 : 0) | (c.searing ? 16 : 0) | (c.auto && !c.remote ? 32 : 0);
+        const k = c.cast;
         return [r2(c.pos.x), r2(c.pos.z), r3(c.rot), flags, Math.round(c.hp), kb ? kb.seq : 0, kb ? r2(kb.vx) : 0, kb ? r2(kb.vz) : 0, kb ? r3(kb.until) : 0,
-          r3(c.stunUntil), r2(c.walk), c.thermal, c.raise ? c.raise.by : -1, kb ? r3(kb.t0) : 0];
+          r3(c.stunUntil), r2(c.walk), c.thermal, c.raise ? c.raise.by : -1, kb ? r3(kb.t0) : 0,
+          k ? [SKILL_IDS.indexOf(k.id), r3(k.t0), r3(k.t1), k.tg] : 0];
       }),
+      lb: r2(S.lb), kg: S.keepGoing ? 1 : 0, sk: {},
       ac: S.actors.filter((a) => !a.dead).map((a) => [a.id, a.look, a.name, r2(a.pos.x), r2(a.pos.z), r3(a.rot), (a.visible ? 1 : 0) | (a.targetable === false ? 0 : 2) | (a.blue ? 4 : 0),
         r2(a.hp), r2(a.lift || 0), a.badge || 0, a.tint || '', a.hits || 0]),
       fx: take(S.fx).map((f) => pick(f, FX_KEYS)),
@@ -63,6 +66,11 @@ class Replicator {
     for (const slot of S.humans) {
       const g = S.guides[slot], key = JSON.stringify(g);
       if (full || this.guideKey[slot] !== key) { m.gd[slot] = g; this.guideKey[slot] = key; }
+      // 真人的技能冷卻（給他自己的技能列顯示）：有變才送
+      const c = S.chars[slot], cd = {};
+      for (const id of Object.keys(c.cd)) if (c.cd[id] > S.t) cd[id] = r3(c.cd[id]);
+      const sk = [r3(c.gcdUntil), cd, c.queued ? c.queued.id : 0], skKey = JSON.stringify(sk);
+      if (full || this.skillKey[slot] !== skKey) { m.sk[slot] = sk; this.skillKey[slot] = skKey; }
     }
     return m;
   }
@@ -75,9 +83,10 @@ class Mirror {
   constructor(pid, variant, mySlot, snap) {
     this.phase = PHASES[pid]; this.pid = pid; this.variant = variant; this.playerSlot = mySlot;
     this.t = snap.t; this.status = 'running'; this.failure = null; this.edgeR = C.EDGE_DEATH; this.shrink = null;
-    this.s = { charges: 0, woken: false };
+    this.s = { charges: 0, woken: false }; this.lb = 0; this.keepGoing = false;
     this.chars = ROLES.map((r) => ({ slot: r.slot, key: r.key, kind: r.kind, pos: { x: 0, z: 0 }, prev: { x: 0, z: 0 }, rot: PI, prevRot: PI,
-      alive: true, hp: 100, kb: null, fell: false, walk: 0, thermal: 0, searing: false, planned: false, raise: null, stunUntil: 0, auto: false }));
+      alive: true, hp: 100, kb: null, fell: false, walk: 0, thermal: 0, searing: false, planned: false, raise: null, stunUntil: 0, auto: false,
+      cast: null, gcdUntil: 0, cd: {}, queued: null }));
     this.actors = []; this.actorMap = new Map();
     this.fx = []; this.fxMap = new Map();
     this.casts = []; this.marks = []; this.feed = []; this.notes = []; this.floats = []; this.screenFx = []; this.sounds = [];
@@ -106,7 +115,8 @@ class Mirror {
     const me = this.playerSlot;
     this.base = { t: m.t, at: performance.now(), running };
     this.status = m.st; this.failure = m.fail; this.edgeR = m.er; this.shrink = m.sh;
-    this.s.charges = m.s[0]; this.s.woken = !!m.s[1];
+    this.s.charges = m.s[0]; this.s.woken = !!m.s[1]; this.lb = m.lb; this.keepGoing = !!m.kg;
+    for (const k of Object.keys(m.sk)) { const c = this.chars[k], d = m.sk[k]; c.gcdUntil = d[0]; c.cd = d[1]; c.queued = d[2] ? { id: d[2] } : null; }
     const frame = { t: m.t, ch: [], ac: new Map() };
     m.ch.forEach((d, i) => {
       const c = this.chars[i];
@@ -117,6 +127,7 @@ class Mirror {
       if (d[5]) { if (!c.kb || c.kb.seq !== d[5]) c.kb = { seq: d[5], vx: d[6], vz: d[7], until: d[8], t0: d[13] }; } else c.kb = null;
       c.stunUntil = d[9]; c.thermal = d[11];
       c.raise = d[3] & 4 ? { by: d[12] } : null;
+      c.cast = d[14] ? { id: SKILL_IDS[d[14][0]], t0: d[14][1], t1: d[14][2], tg: d[14][3] } : null;
       if (i !== me || c.auto || !c.alive) c.walk = d[10];
       c.host = { x: d[0], z: d[1], rot: d[2] };
       if (i === me && c.alive && !wasAlive) this.teleport = true;   // 復活：從屍體位置起身
@@ -152,7 +163,7 @@ class Mirror {
   /** 每幀：推進時鐘、內插其他角色與實體、清掉過期的東西。 */
   frame(now, dt) {
     const b = this.base;
-    const target = b.running ? b.t + (now - b.at) / 1000 : b.t;
+    const target = b.running ? b.t + Math.min(0.4, (now - b.at) / 1000) : b.t;   // 房主那邊停住（例如分頁在背景）就不要一直往前推
     if (!b.running || Math.abs(target - this.clock) > 0.3) this.clock = target;
     else this.clock += dt + (target - this.clock) * 0.1;
     this.t = this.clock;

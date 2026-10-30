@@ -4,7 +4,7 @@ root = os.path.dirname(os.path.abspath(__file__))
 rd = lambda *p: open(os.path.join(root, *p), encoding='utf-8').read()
 html = rd('src', 'index.template.html')
 parts = [('/*__CSS__*/', rd('src', 'style.css')), ('/*__THREE__*/', rd('vendor', 'three.min.js'))]
-scripts = ''.join('<script>\n%s\n</script>\n' % rd('src', f) for f in ['core.js', 'frames.js', 'p1.js', 'p2.js', 'p3.js', 'audio.js', 'icons.js', 'models.js', 'render2d.js', 'render3d.js', 'net.js', 'ui.js'])
+scripts = ''.join('<script>\n%s\n</script>\n' % rd('src', f) for f in ['core.js', 'skills.js', 'frames.js', 'p1.js', 'p2.js', 'p3.js', 'audio.js', 'icons.js', 'models.js', 'render2d.js', 'render3d.js', 'net.js', 'ui.js'])
 for key, val in parts:
     assert html.count(key) == 1, key
     html = html.replace(key, val)

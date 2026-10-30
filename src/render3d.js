@@ -465,7 +465,11 @@ class Renderer3D {
     m.group.add(ring, lab);
     this.scene.add(m.group);
     const blob = this.blob(0.6); this.scene.add(blob);
-    return { m, ring, lab, markers, blob, kbRef: null, kbT0: 0, kbDur: 1, deadT: -1, fallY: 0, spin: 0, walkSm: 0 };
+    // 讀條光圈（腳下，藍：攻擊、金：復活）與倒地者的「已收到復活」標記：放在場景上（倒地時角色群組會躺平）
+    const castRing = new T.Mesh(SH(new T.RingGeometry(0.95, 1.2, 48)), new T.MeshBasicMaterial({ color: 0x7fc4ff, side: T.DoubleSide, transparent: true, opacity: 0.8, depthWrite: false, blending: T.AdditiveBlending }));
+    castRing.rotation.x = -PI / 2; castRing.visible = false; this.scene.add(castRing);
+    const raiseMark = textSprite('✚ 復活', { fg: '#2a1d00', bg: '#ffd866', size: 34 }); raiseMark.visible = false; this.scene.add(raiseMark);
+    return { m, ring, lab, markers, blob, castRing, raiseMark, kbRef: null, kbT0: 0, kbDur: 1, deadT: -1, fallY: 0, spin: 0, walkSm: 0 };
   }
 
   makeActor(a) {
@@ -811,7 +815,7 @@ class Renderer3D {
       const ob = this.charObjs[i], g = ob.m.group;
       const show = !solo || c.slot === sim.playerSlot;
       g.visible = show;
-      if (!show) { ob.blob.visible = false; return; }
+      if (!show) { ob.blob.visible = false; ob.castRing.visible = false; ob.raiseMark.visible = false; return; }
       if (c.kb !== ob.kbRef) { ob.kbRef = c.kb; if (c.kb) { ob.kbT0 = t; ob.kbDur = Math.max(0.1, c.kb.until - t); } }
       let y = 0;
       if (c.kb || (t - ob.kbT0 < ob.kbDur && ob.kbRef === null && ob.kbT0 > 0)) {
@@ -837,6 +841,16 @@ class Renderer3D {
         g.rotation.set(-PI / 2 * k, c.rot, ob.spin);
         g.position.y += 0.25 * k;
       }
+      const k = c.alive ? c.cast : null;
+      ob.castRing.visible = !!k;
+      if (k) {
+        const p = Math.max(0, Math.min(1, (t - k.t0) / (k.t1 - k.t0))), sc = 0.55 + 0.45 * p;
+        ob.castRing.position.set(ip.x, 0.06, ip.z); ob.castRing.scale.set(sc, sc, 1);
+        ob.castRing.material.color.setHex(k.id === 'raise' ? 0xffd866 : 0x7fc4ff);
+        ob.castRing.material.opacity = 0.45 + 0.4 * Math.abs(Math.sin(tsec * 5));
+      }
+      ob.raiseMark.visible = !c.alive && !!c.raise;
+      if (ob.raiseMark.visible) ob.raiseMark.position.set(ip.x, 1.4 + Math.sin(tsec * 3) * 0.08, ip.z);
       ob.ring.visible = c.slot === sim.playerSlot && c.alive;
       if (ob.ring.visible) { const s = 1 + Math.sin(tsec * 4) * 0.06; ob.ring.scale.set(s, s, 1); }
       ob.lab.visible = c.alive && c.slot !== sim.playerSlot;   // 跟 FF14 預設一樣不顯示自己的名牌（鏡頭拉近時才不會擋到 Boss）
