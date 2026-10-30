@@ -3,3 +3,4 @@ node_modules/
 *.html
 !server/public/index.html
 !src/index.template.html
+shots/

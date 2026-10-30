@@ -20,6 +20,8 @@ const STATUS_DEF = {
   mark_friction: { name: '烈風刃（點名）', icon: '刃', color: '#ffc83c', mark: true },
   mark_crush: { name: '烈焰碎擊（分攤）', icon: '分', color: '#ff5a3c', mark: true },
   mark_gaol: { name: '花崗石牢（點名）', icon: '牢', color: '#d8a060', mark: true },
+  mark_erupt: { name: '地火噴發（點名）', icon: '噴', color: '#ff7a3c', mark: true },
+  mark_pillar: { name: '光柱（點名）', icon: '柱', color: '#5ee8d8', mark: true },
   gaol: { name: '花崗石牢（拘束・無敵）', icon: '牢', color: '#a07850' },
   stun: { name: '暈眩', icon: '暈', color: '#e0c050' },
   transcendent: { name: '復活無敵', icon: '無', color: '#f5e27a' },
@@ -325,7 +327,7 @@ class Sim {
   hazard(o) {
     const tRes = o.tRes, snap = o.snap === undefined ? tRes : o.snap;
     let fx = null, hit = [];
-    if (o.buster) this.at(o.t0, () => this.expect('buster', tRes, o.label));
+    if (o.buster) this.at(o.t0, () => this.expect('buster', tRes, o.label, o.busterTarget));   // busterTarget：死刑打的不是主坦時（例如誘導射線）
     this.at(o.t0, () => {
       const g = typeof o.geom === 'function' ? o.geom() : o.geom;
       fx = this.addFx(Object.assign({ t1: tRes, label: o.label || '', tint: o.tint || 'danger', assistFrom: o.assistFrom }, g, { kind: o.kind, t0: o.omen === undefined ? o.t0 : o.omen }));

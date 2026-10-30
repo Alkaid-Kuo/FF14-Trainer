@@ -261,7 +261,7 @@ const QUALITY = {
   normal: { dpr: 1.5, shadows: false, particles: 1, wall: true, fireLight: false },
   smooth: { dpr: 1, shadows: false, particles: 0.5, wall: false, fireLight: false },
 };
-const BLOB_R = { garuda: 1.7, sister: 1.2, ifrit: 2.0, ifrit_clone: 1.6, titan: 3.2, bomb: 1.0, gaol: 1.3, spiny: 0.6, plume: 0.4, nail: 1.2, shard: 0.4, ultima: 2.8, lahabrea: 0.8, bit: 0.5 };
+const BLOB_R = { garuda: 1.7, sister: 1.2, ifrit: 2.0, ifrit_clone: 1.6, titan: 3.2, bomb: 1.0, gaol: 1.3, spiny: 0.6, plume: 0.4, nail: 1.2, shard: 0.4, ultima: 2.8, lahabrea: 0.8, bit: 0.5, orb: 0.8, feather: 0.7 };
 const SH = (g) => { g.userData.shared = true; return g; };
 
 class Renderer3D {
@@ -345,7 +345,7 @@ class Renderer3D {
       編好的暫存物件保留（隱藏）到下一次預熱，材質沒被釋放，著色器才會留在快取裡。 */
   prewarm() {
     const old = this.warm;
-    const made = ['garuda', 'sister', 'ifrit', 'ifrit_clone', 'titan', 'bomb', 'gaol', 'spiny', 'plume', 'nail', 'shard'].map((look) => this.makeActor({ look, name: look, tint: '#e0b25a', blue: false }));
+    const made = ['garuda', 'sister', 'ifrit', 'ifrit_clone', 'titan', 'bomb', 'gaol', 'spiny', 'plume', 'nail', 'shard', 'orb', 'feather'].map((look) => this.makeActor({ look, name: look, tint: '#e0b25a', blue: false }));
     made.push(this.makeActor({ look: 'ifrit_clone', name: 'b', blue: true }));
     const fakes = [
       { kind: 'circle', r: 3, tint: 'danger' }, { kind: 'circle', r: 3, tint: 'share' }, { kind: 'rect', len: 10, w: 4, tint: 'line' },
@@ -488,6 +488,8 @@ class Renderer3D {
       case 'ultima': m = MD.ultima(); break;
       case 'lahabrea': m = MD.lahabrea(); break;
       case 'bit': m = MD.bit(); break;
+      case 'orb': m = MD.orb(); break;
+      case 'feather': m = MD.plume(0xc8f59a, 0x3a9a2a); m.float.scale.setScalar(1.9); break;
       default: m = MD.shard(); break;
     }
     const info = { m, label: null, badgeKey: '', badge: null, blob: this.blob(BLOB_R[a.look]) };
@@ -949,7 +951,11 @@ class Renderer3D {
       } else if (m.kind === 'shard') { m.float.rotation.y = tsec * 2; m.float.position.y = Math.sin(tsec * 3) * 0.2; }
       else if (m.kind === 'ultima') MD.animateUltima(m, tsec, castP, op);
       else if (m.kind === 'lahabrea') { m.float.position.y = 0.6 + Math.sin(tsec * 1.6) * 0.15; m.mats.glow.emissiveIntensity = 1.8 + castP * 2.5; }
-      else if (m.kind === 'bit') {
+      else if (m.kind === 'orb') {
+        m.float.position.y = 1.4 + Math.sin(tsec * 2.2 + a.pos.x) * 0.15; m.float.rotation.y = tsec * 1.2;
+        m.mats.core.emissiveIntensity = 2.0 + Math.sin(tsec * 6) * 0.8;
+        if (dts > 0 && Math.random() < 0.3) this.sparks.spawn(a.pos.x + (Math.random() - 0.5) * 1.2, 1.0 + Math.random() * 0.8, a.pos.z + (Math.random() - 0.5) * 1.2, 0, 1.0, 0, 0.6, new T.Color(0xc27aff), -0.3, 0.8);
+      } else if (m.kind === 'bit') {
         m.float.position.y = 2.0 + Math.sin(tsec * 2.4 + a.pos.x) * 0.25; m.float.rotation.y = tsec * 1.5;
         m.mats.eye.emissiveIntensity = 1.5 + Math.abs(Math.sin(tsec * 6)) * 2.5 * a.hp;
       }

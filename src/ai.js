@@ -62,13 +62,15 @@ function make(opt) {
       if (!c.alive || now < c.stunUntil) return sp;
       const bad = badFn(S, c, opt.margin);
       let p = nearestSafe(xz(sp), bad);
-      // 直線走過去的途中，會不會剛好在某個判定的瞬間站在範圍裡？會的話改去「那之前走得到」的安全點
+      // 直線走過去的途中，會不會剛好在某個判定的瞬間站在範圍裡（出發可能晚 0～0.4 秒）？會的話改去「那之前走得到」的安全點
       const d = Math.hypot(p.x - c.pos.x, p.z - c.pos.z);
       let tHit = Infinity;
       for (const f of pendingFx(S, c)) {
-        const k = d < 1e-6 ? 1 : Math.min(1, Math.max(0, v * (f.t1 - now - 0.4)) / d);
-        const q = { x: c.pos.x + (p.x - c.pos.x) * k, z: c.pos.z + (p.z - c.pos.z) * k };
-        if (inFx(q, f, 0.3)) tHit = Math.min(tHit, f.t1 - now);
+        for (const late of [0, 0.2, 0.4]) {
+          const k = d < 1e-6 ? 1 : Math.min(1, Math.max(0, v * (f.t1 - now - late)) / d);
+          const q = { x: c.pos.x + (p.x - c.pos.x) * k, z: c.pos.z + (p.z - c.pos.z) * k };
+          if (inFx(q, f, 0.3)) { tHit = Math.min(tHit, f.t1 - now); break; }
+        }
       }
       if (tHit !== Infinity) p = bestReachable(c.pos, p, Math.max(0, v * (tHit - 0.5)), bad);
       return [p.x, p.z];

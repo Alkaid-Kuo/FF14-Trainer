@@ -184,21 +184,22 @@ P.useLB = function (c) {
     this.log(`${c.key}：治療極限技 LB${lv}${n ? `（${n} 人復活）` : '（全隊回復）'}`, c.slot);
   } else this.log(`${c.key}：${LB_NAME[kind]}極限技 LB${lv}（大量傷害）`, c.slot);
 };
-/** 機制預告（給 AI 用減傷）：kind 'raid'＝大範圍攻擊、'buster'＝死刑；tRes 判定時間。 */
-P.expect = function (kind, tRes) {
+/** 機制預告（給 AI 用減傷）：kind 'raid'＝大範圍攻擊、'buster'＝死刑；tRes 判定時間；who()：死刑對象（預設主坦）。 */
+P.expect = function (kind, tRes, label, who) {
   if (kind === 'raid') {
     this.aiQ.push({ t: Math.max(this.t, tRes - 4), fn: () => {
       if (this.partyMitOn()) return;
       for (const [slot, id] of MIT_ORDER) {
         const c = this.chars[slot];
         if (!c.auto || !c.alive || (c.cd[id] || 0) > this.t) continue;
+        if (this.phase.mitReserve && this.phase.mitReserve(this, slot, id)) continue;   // 留給之後的機制（例如 P4 火神爆裂的群盾）
         this.aiFree(c);
         if (usable(this, slot, id)) { this.useSkill(slot, id); return; }
       }
     } });
   } else if (kind === 'buster') {
     this.aiQ.push({ t: Math.max(this.t, tRes - 2.5), fn: () => {
-      const c = this.mainTank();
+      const c = who ? who() : this.mainTank();
       if (!c.auto || !isTank(c.slot) || SELF_MIT.some((id) => this.hasStatus(c.slot, id))) return;
       for (const id of ['mit', 'inv']) if (usable(this, c.slot, id)) { this.useSkill(c.slot, id); return; }
     } });

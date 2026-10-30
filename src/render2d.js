@@ -452,6 +452,23 @@ class Renderer2D {
         this.hpBar(ctx, px, pz - r * 1.6, r * 2.2, a.hp);
         break;
       }
+      case 'orb': {
+        const r = 0.8 * scale, gl = ctx.createRadialGradient(px, pz, 0, px, pz, r * 1.9);
+        gl.addColorStop(0, `rgba(210,140,255,${0.55 + 0.25 * Math.sin(tsec * 6)})`); gl.addColorStop(1, 'rgba(140,60,220,0)');
+        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(px, pz, r * 1.9, 0, PI * 2); ctx.fill();
+        disc(r, '#e2b8ff', '#9a4ae0', '#4a1a80');
+        label(a.name, r);
+        break;
+      }
+      case 'feather': {
+        const r = 1.0 * scale;
+        ctx.save(); ctx.translate(px, pz); ctx.rotate(-a.rot + 0.6);
+        ctx.fillStyle = 'rgba(200,245,154,0.95)'; ctx.strokeStyle = '#2a7a1a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 0.45, r * 1.25, 0, 0, PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -r * 1.25); ctx.lineTo(0, r * 1.25); ctx.stroke();
+        ctx.restore();
+        break;
+      }
       case 'bomb': {
         const r = 0.95 * scale, k = a.hp;
         if (k > 0) { const gl = ctx.createRadialGradient(px, pz, 0, px, pz, r * 2); gl.addColorStop(0, `rgba(255,140,50,${0.35 + 0.25 * Math.sin(tsec * (6 + 8 * k))})`); gl.addColorStop(1, 'rgba(255,100,30,0)'); ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(px, pz, r * 2, 0, PI * 2); ctx.fill(); }

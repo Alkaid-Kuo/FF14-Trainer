@@ -69,6 +69,21 @@ function marker(type) {
       ctx.strokeStyle = '#ffd08a'; ctx.lineWidth = 6;
       for (const x of [-16, 0, 16]) { ctx.beginPath(); ctx.moveTo(cx + x, cy - 26); ctx.lineTo(cx + x, cy + 26); ctx.stroke(); }
       ctx.fillStyle = '#ffd08a'; ctx.beginPath(); ctx.moveTo(cx - 12, 108); ctx.lineTo(cx + 12, 108); ctx.lineTo(cx, 124); ctx.closePath(); ctx.fill();
+    } else if (type === 'erupt') {
+      // 地火噴發：橘紅光暈＋往上噴的火焰
+      glowCircle(ctx, cx, cy, 60, 'rgba(255,150,70,0.95)', 'rgba(220,60,10,0.45)');
+      ctx.fillStyle = '#ffcf8a'; ctx.strokeStyle = '#8a2208'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(cx, cy - 36); ctx.quadraticCurveTo(cx + 26, cy - 4, cx + 18, cy + 22); ctx.quadraticCurveTo(cx, cy + 34, cx - 18, cy + 22);
+      ctx.quadraticCurveTo(cx - 26, cy - 4, cx, cy - 36); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ff6a1e'; ctx.beginPath(); ctx.ellipse(cx, cy + 10, 9, 14, 0, 0, PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffcf8a'; ctx.beginPath(); ctx.moveTo(cx - 12, 108); ctx.lineTo(cx + 12, 108); ctx.lineTo(cx, 124); ctx.closePath(); ctx.fill();
+    } else if (type === 'pillar') {
+      // 光柱：青色光暈＋直立的光柱
+      glowCircle(ctx, cx, cy, 60, 'rgba(140,255,240,0.95)', 'rgba(30,170,200,0.45)');
+      ctx.fillStyle = '#e8fffb'; ctx.strokeStyle = '#1a8a9a'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.rect(cx - 11, cy - 36, 22, 66); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(cx, cy + 30, 26, 9, 0, 0, PI * 2); ctx.stroke();
+      ctx.fillStyle = '#8affef'; ctx.beginPath(); ctx.moveTo(cx - 12, 108); ctx.lineTo(cx + 12, 108); ctx.lineTo(cx, 124); ctx.closePath(); ctx.fill();
     } else {
       glowCircle(ctx, cx, cy, 56, 'rgba(255,255,255,0.9)', 'rgba(150,150,255,0.4)');
     }

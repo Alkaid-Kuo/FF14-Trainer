@@ -445,8 +445,8 @@ function spiny() {
   for (const sx of [-1, 1]) float.add(mesh(ball('spEye', 0.08, 8, 6), mats.eye, sx * 0.2, 0.15, 0.52));
   return { group, float, mats, kind: 'spiny' };
 }
-function plume() {
-  const mats = { f: std(0xf3eefe, { roughness: 0.4, emissive: 0x6a4aa0, emissiveIntensity: 0.35, transparent: true }) };
+function plume(color, glow) {
+  const mats = { f: std(color || 0xf3eefe, { roughness: 0.4, emissive: glow || 0x6a4aa0, emissiveIntensity: 0.35, transparent: true }) };
   const group = new T.Group(), float = new T.Group(); group.add(float);
   const f = mesh(ball('plF', 1, 12, 8), mats.f); f.scale.set(0.28, 0.85, 0.07); f.rotation.z = 0.5;
   const quill = mesh(geo('plQ', () => new T.CylinderGeometry(0.02, 0.02, 1.8, 5)), std(0xb8a8d8)); quill.rotation.z = 0.5;
@@ -662,6 +662,15 @@ function lahabrea() {
   float.add(head);
   return { group, float, mats, kind: 'lahabrea' };
 }
+/** 以太炸彈：浮空的紫色能量球（外殼半透明）。 */
+function orb() {
+  const mats = { core: glowMat(0xc27aff, 2.6, { transparent: true, opacity: 0.95 }), shell: glowMat(0x8a4ad8, 0.9, { transparent: true, opacity: 0.3, depthWrite: false }) };
+  const group = new T.Group(), float = new T.Group(); group.add(float);
+  float.add(mesh(ball('oCore', 0.5, 16, 12), mats.core, 0, 0, 0));
+  const shell = mesh(ball('oShell', 0.95, 18, 14), mats.shell, 0, 0, 0); shell.castShadow = false; float.add(shell);
+  float.position.y = 1.4;
+  return { group, float, mats, kind: 'orb' };
+}
 /** 魔導浮游炮：浮空的三角錐砲台，紅色感應眼。 */
 function bit() {
   const mats = { body: std(0x5a6070, { metalness: 0.7, roughness: 0.3 }), fin: std(0x343a48, { metalness: 0.7, roughness: 0.35 }), eye: glowMat(0xff4a3a, 2.4) };
@@ -675,5 +684,5 @@ function bit() {
   return { group, float, mats, kind: 'bit' };
 }
 
-root.UWU_MODELS = { character, animateCharacter, setCharacterDead, garuda, animateGaruda, ifrit, animateIfrit, titan, animateTitan, bomb, gaol, spiny, plume, nail, shard, ultima, animateUltima, lahabrea, bit };
+root.UWU_MODELS = { character, animateCharacter, setCharacterDead, garuda, animateGaruda, ifrit, animateIfrit, titan, animateTitan, bomb, gaol, spiny, plume, nail, shard, ultima, animateUltima, lahabrea, bit, orb };
 })(window);

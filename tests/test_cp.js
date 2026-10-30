@@ -1,4 +1,4 @@
-const U = require('../src/core.js'); require('../src/frames.js'); require('../src/p1.js'); require('../src/p2.js'); require('../src/p3.js');
+const U = require('../src/core.js'); require('../src/frames.js'); require('../src/p1.js'); require('../src/p2.js'); require('../src/p3.js'); require('../src/p4.js');
 for (const ph of (process.argv[2] || 'p1,p2,p3').split(',')) {
   const P = U.PHASES[ph];
   console.log('==', ph);
