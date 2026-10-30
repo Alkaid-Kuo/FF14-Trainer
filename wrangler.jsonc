@@ -3,6 +3,8 @@
   "name": "ff14-trainer",
   "main": "server/worker.js",
   "compatibility_date": "2025-09-01",
+  // 開啟 ff14-trainer.<帳號>.workers.dev 網址
+  "workers_dev": true,
   "assets": { "directory": "./server/public", "binding": "ASSETS" },
   "durable_objects": {
     "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
