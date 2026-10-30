@@ -1,5 +1,5 @@
 {
-  // 絕神兵練習器：網頁＋連線伺服器（部署：npx wrangler deploy）
+  // 給 Root directory 設成 server 時用；內容要跟最上層的 wrangler.jsonc 一致
   "name": "ff14-trainer",
   "main": "worker.js",
   "compatibility_date": "2025-09-01",

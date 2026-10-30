@@ -14,7 +14,8 @@ FF14 絕神兵（P1 迦樓羅、P2 伊弗利特、P3 泰坦）的機制練習器
 | `src/` | 原始碼：`core.js` 模擬核心、`p1.js`／`p2.js`／`p3.js` 各階段、`render2d.js`／`render3d.js` 畫面、`net.js` 連線同步、`ui.js` 介面 |
 | `vendor/three.min.js` | three.js r160 |
 | `build.py` | 打包成單一 HTML，輸出到 `server/public/index.html` |
-| `server/` | 連線伺服器：Cloudflare Worker＋Durable Object（`worker.js`、`wrangler.jsonc`）；`public/` 是網頁本體 |
+| `server/` | 連線伺服器：Cloudflare Worker＋Durable Object（`worker.js`）；`public/` 是網頁本體 |
+| `wrangler.jsonc` | Cloudflare 部署設定 |
 | `tests/` | 模擬回歸測試（`node tests/test_p3.js 300`） |
 | `gen/` | 從攻略圖檔擷取站位用的腳本 |
 
@@ -31,8 +32,8 @@ python3 build.py
 1. 註冊 [Cloudflare](https://dash.cloudflare.com/sign-up) 免費帳號。
 2. Dashboard → **Workers & Pages** → **Create** → **Import a repository**，連結 GitHub 並選這個 repo。
 3. 設定：
-   - Project name：`ff14-trainer`（要跟 `server/wrangler.jsonc` 的 `name` 一樣）
-   - Root directory：`server`
+   - Project name：`ff14-trainer`（要跟 `wrangler.jsonc` 的 `name` 一樣）
+   - Root directory：留空（`/`）
    - Build command：留空
    - Deploy command：`npx wrangler deploy`（預設值）
 4. 按 Deploy。完成後會拿到 `https://ff14-trainer.<帳號>.workers.dev`，把這個網址給隊友即可。
@@ -53,7 +54,7 @@ python3 build.py
 ## 本機測試伺服器
 
 ```sh
-cd server && npx wrangler dev   # http://127.0.0.1:8787
+npx wrangler dev   # 在 repo 最上層執行，http://127.0.0.1:8787
 ```
 
 ## 免費額度
