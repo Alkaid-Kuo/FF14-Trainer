@@ -150,7 +150,7 @@ class Renderer2D {
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(this.background(o.pid, mini, scale, cx, cz), ox, oz, W, H);
     this.view = { cx, cz, scale };   // 給「點地圖放標點」換算座標用
-    this.drawWaymarks(ctx, o.wm.list, X, Z, scale, mini);
+    if (!mini) this.drawWaymarks(ctx, o.wm.list, X, Z, scale, mini);   // 小地圖的標點畫在最上層（不會被人物、Boss 擋住）
 
     // 場地縮小的危險區（預告：半透明橘；生效：深色。不閃爍）
     const sk = sim.shrink;
@@ -262,6 +262,7 @@ class Renderer2D {
       if (o.solo && c.slot !== sim.playerSlot) continue;
       this.drawChar(ctx, c, sim, o, scale, X, Z, tsec, marks);
     }
+    if (mini) this.drawWaymarks(ctx, o.wm.list, X, Z, scale, mini);
 
     // 粒子
     this.parts = this.parts.filter((p) => (p.life -= dt) > 0);
@@ -298,7 +299,7 @@ class Renderer2D {
     for (const w of list) {
       const num = /\d/.test(w.k);
       const s = mini ? Math.max(num ? 13 : 16, scale * (num ? 2.8 : 3.6)) : Math.max(num ? 18 : 22, scale * (num ? 2.4 : 3.0));
-      ctx.globalAlpha = num ? 0.7 : 0.95;
+      ctx.globalAlpha = mini ? (num ? 0.62 : 0.8) : num ? 0.7 : 0.95;
       ctx.drawImage(IC.waymark(w.k, WM_COLOR[w.k]), X(w.x) - s / 2, Z(w.z) - s / 2, s, s);
     }
     ctx.globalAlpha = 1;
@@ -510,6 +511,15 @@ class Renderer2D {
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, pz, r, 0, PI * 2); ctx.fill();
     ctx.strokeStyle = isMe ? '#ffffff' : 'rgba(0,0,0,0.6)'; ctx.lineWidth = isMe ? 3 : 1.5; ctx.stroke();
     const cr = irot(c, this.alpha), fx = Math.sin(cr), fz = Math.cos(cr);
+    // 衝刺中移動：身後的速度線
+    if (c.walk > 1 && !o.mini && sim.statusesOf(c).some((x) => x.id === 'sprint')) {
+      ctx.strokeStyle = 'rgba(140,220,255,0.75)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      for (const k of [-0.55, 0, 0.55]) {
+        const ox = px - fx * (r + 3) + fz * k * r, oz = pz - fz * (r + 3) - fx * k * r, L = r * (k ? 1.1 : 1.7) * (0.8 + 0.2 * Math.sin(tsec * 20 + k * 5));
+        ctx.beginPath(); ctx.moveTo(ox, oz); ctx.lineTo(ox - fx * L, oz - fz * L); ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+    }
     ctx.fillStyle = '#fff'; ctx.beginPath();
     ctx.moveTo(px + fx * (r + 5), pz + fz * (r + 5));
     ctx.lineTo(px + fx * r - fz * 4, pz + fz * r + fx * 4);

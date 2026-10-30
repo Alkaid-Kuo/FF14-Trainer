@@ -840,7 +840,7 @@ function updateHotbar(sim) {
     let p = 0, txt = '';
     if (sk.gcd) { const rem = pc.gcdUntil - t; if (rem > 0 && run) p = Math.min(1, rem / GCD); }
     else if (!sk.lb && pc.cd[sl.id] !== undefined) { const rem = pc.cd[sl.id] - t; if (rem > 0) { p = rem / sk.cd; txt = String(Math.ceil(rem)); } }
-    const off = !run || blocked || (sk.lb && sim.lb < 1) || (sk.melee && far) || (sk.gcd && !sk.raise && !b) || (sk.raise && !raiseTarget(sim, pc, S.target));
+    const off = !!(!run || blocked || (sk.lb && sim.lb < 1) || (sk.melee && far) || (sk.gcd && !sk.raise && !b) || (sk.raise && !raiseTarget(sim, pc, S.target)));
     const q = !!(pc.queued && pc.queued.id === sl.id);
     const key = `${p.toFixed(2)}|${txt}|${off}|${q}`;
     if (key === sl.key) continue;

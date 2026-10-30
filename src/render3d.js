@@ -382,7 +382,7 @@ class Renderer3D {
     // 場地標點（玩家可自訂，render 時依版本號重建）
     this.wmGroup = new T.Group(); this.arena.add(this.wmGroup); this.wmVer = -1;
     this.wmBeamTex = canvasTex(gradientStrip([[0, 'rgba(255,255,255,0)'], [0.6, 'rgba(255,255,255,0.35)'], [1, 'rgba(255,255,255,0.9)']]));
-    this.wmGeo = { let: SH(new T.PlaneGeometry(3.2, 3.2)), num: SH(new T.PlaneGeometry(2.6, 2.6)), beam: SH(new T.CylinderGeometry(1.25, 1.25, 3.2, 24, 1, true)) };
+    this.wmGeo = { let: SH(new T.PlaneGeometry(3.2, 3.2)), num: SH(new T.PlaneGeometry(2.6, 2.6)), beam: SH(new T.CylinderGeometry(1.25, 1.25, 3.2, 24, 1, true)), beamNum: SH(new T.CylinderGeometry(1.0, 1.0, 3.2, 24, 1, true)) };
     // 邊緣（碰到會死）：外圈發光牆（不閃爍、不流動）
     this.wallTex = canvasTex(wallCanvas(), true); this.wallTex.repeat.set(10, 1);
     this.wallMat = new T.MeshBasicMaterial({ map: this.wallTex, transparent: true, opacity: 0.7, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide });
@@ -436,10 +436,9 @@ class Renderer3D {
       const m = new T.Mesh(num ? this.wmGeo.num : this.wmGeo.let, new T.MeshBasicMaterial({ map: iconTex('wm' + k, () => IC.waymark(k, col)), transparent: true, depthWrite: false, opacity: num ? 0.75 : 0.95 }));
       m.rotation.x = -PI / 2; m.position.set(x, 0.025, z); m.renderOrder = 1;
       this.wmGroup.add(m);
-      if (!num) {
-        const beam = new T.Mesh(this.wmGeo.beam, new T.MeshBasicMaterial({ color: col, map: this.wmBeamTex, transparent: true, opacity: 0.35, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide }));
-        beam.position.set(x, 1.6, z); this.wmGroup.add(beam);
-      }
+      // 光柱：數字標點細一點、淡一點
+      const beam = new T.Mesh(num ? this.wmGeo.beamNum : this.wmGeo.beam, new T.MeshBasicMaterial({ color: col, map: this.wmBeamTex, transparent: true, opacity: num ? 0.28 : 0.35, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide }));
+      beam.position.set(x, 1.6, z); this.wmGroup.add(beam);
     }
   }
   /** 螢幕座標 → 地面（y=0）座標；看不到地面時回傳 null。 */
@@ -869,7 +868,10 @@ class Renderer3D {
         for (const s of sim.statusesOf(c)) {
           if (s.id === 'searing' && Math.random() < 0.7) { const a = Math.random() * PI * 2; this.sparks.spawn(c.pos.x + Math.cos(a) * 0.7, 0.3 + Math.random() * 1.6, c.pos.z + Math.sin(a) * 0.7, 0, 1.8, 0, 0.6, new T.Color(0xff7a2a), -1, 0.8); }
           else if (s.id === 'curse' && Math.random() < 0.6) { const a = Math.random() * PI * 2; this.sparks.spawn(c.pos.x + Math.cos(a) * 0.6, 0.2 + Math.random() * 1.8, c.pos.z + Math.sin(a) * 0.6, 0, 1.5, 0, 0.7, new T.Color(0xc05aff), -1, 0.8); }
-          else if (s.id === 'thermal' && Math.random() < 0.08 * s.stacks) { const a = Math.random() * PI * 2; this.sparks.spawn(c.pos.x + Math.cos(a) * 0.5, 2.2, c.pos.z + Math.sin(a) * 0.5, 0, -0.6, 0, 1.0, new T.Color(0x9fd8ff), 0, 1); }
+          else if (s.id === 'sprint' && c.walk > 1 && Math.random() < 0.9) {   // 衝刺：腳下往後飄的風
+            const fx = Math.sin(c.rot), fz = Math.cos(c.rot), sd = (Math.random() - 0.5) * 0.8;
+            this.sparks.spawn(c.pos.x - fx * 0.4 + fz * sd, 0.15 + Math.random() * 0.9, c.pos.z - fz * 0.4 - fx * sd, -fx * 5, 0.4, -fz * 5, 0.35, new T.Color(0x9fe4ff), 0, 3);
+          } else if (s.id === 'thermal' && Math.random() < 0.08 * s.stacks) { const a = Math.random() * PI * 2; this.sparks.spawn(c.pos.x + Math.cos(a) * 0.5, 2.2, c.pos.z + Math.sin(a) * 0.5, 0, -0.6, 0, 1.0, new T.Color(0x9fd8ff), 0, 1); }
         }
       }
     });
