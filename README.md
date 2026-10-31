@@ -60,6 +60,8 @@ podman push <registry>/ff14-trainer:<tag>
 kubectl -n ff14-trainer set image deploy/ff14-trainer ff14-trainer=<registry>/ff14-trainer:<tag>
 ```
 
+伺服器的連線測試：先 `cd server && npm ci`，再在專案根目錄執行 `node tests/test_server.js`。
+
 `app.yaml` 的 image 標籤不會跟著 `set image` 更新，重新套用前要先改成目前的版本，不然會退回舊版。
 
 ## 連線玩法

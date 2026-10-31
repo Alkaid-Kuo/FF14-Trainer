@@ -2,6 +2,7 @@
    需要先在 server/ 執行 npm install；用 Node 22 內建的 WebSocket 當客戶端。 */
 const assert = require('assert');
 const path = require('path');
+const net = require('net');
 const { spawn } = require('child_process');
 
 const PORT = 18765;
@@ -41,7 +42,28 @@ async function main() {
 
   // 房號不合法：連不上
   const bad = new WebSocket(`ws://${BASE}/ws?room=toolong`);
-  await new Promise((r) => { bad.onclose = r; });
+  await new Promise((r) => { bad.onerror = r; bad.onclose = r; });   // 握手被拒時有的 Node 版本只觸發 error、不會觸發 close
+
+  // 不合法的請求不能讓伺服器掛掉：請求目標壞掉（new URL 會拋錯）、upgrade 被拒絕時對方立刻重置連線
+  const rawLine = (payload) => new Promise((resolve) => {
+    const s = net.connect(PORT, '127.0.0.1', () => s.write(payload));
+    let first = '';
+    s.on('data', (d) => { first += d.toString(); });
+    s.on('error', () => {});
+    s.on('close', () => resolve(first.split('\r\n')[0]));
+  });
+  assert.match(await rawLine('GET //[ HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n'), /^HTTP\/1\.1 400/);
+  assert.match(await rawLine('GET //[ HTTP/1.1\r\nHost: x\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n'), /^HTTP\/1\.1 400/);
+  for (let i = 0; i < 30; i++) {
+    const s = net.connect(PORT, '127.0.0.1', () => {
+      s.write('GET /bad HTTP/1.1\r\nHost: x\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n');
+      s.resetAndDestroy();
+    });
+    s.on('error', () => {});
+    await sleep(5);
+  }
+  await sleep(100);
+  assert.strictEqual((await fetch(`http://${BASE}/healthz`)).status, 200, '壞請求之後伺服器還要活著');
 
   // 第一個進房的是房主
   const a = await client('abcd', '甲').joined();

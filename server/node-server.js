@@ -103,8 +103,10 @@ function serveHtml(req, res) {
 }
 
 const server = http.createServer((req, res) => {
-  const { pathname } = new URL(req.url, 'http://localhost');
   const reply = (status, text) => { res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(text); };
+  // 請求目標不合法（例如 //[）時 new URL 會拋錯；不接住整個程序會崩潰、所有房間清空
+  let pathname;
+  try { ({ pathname } = new URL(req.url, 'http://localhost')); } catch (_) { return reply(400, 'Bad Request'); }
   if (pathname === '/ws') return reply(426, '需要 WebSocket');
   if (pathname === '/healthz') return reply(200, 'ok');
   if (req.method !== 'GET' && req.method !== 'HEAD') return reply(405, 'Method Not Allowed');
@@ -115,8 +117,12 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE });
 
 server.on('upgrade', (req, socket, head) => {
-  const url = new URL(req.url, 'http://localhost');
+  // upgrade 事件時 http 自己的 socket 錯誤監聽已被移除，ws 要到 handleUpgrade 才會掛上；
+  // 這之前（或直接拒絕時）對方重置連線會是沒人接的 ECONNRESET，整個程序會崩潰
+  socket.on('error', () => socket.destroy());
   const refuse = (line) => { socket.end(`HTTP/1.1 ${line}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`); };
+  let url;
+  try { url = new URL(req.url, 'http://localhost'); } catch (_) { return refuse('400 Bad Request'); }
   if (url.pathname !== '/ws') return refuse('404 Not Found');
   const code = (url.searchParams.get('room') || '').toUpperCase();
   if (!ROOM_RE.test(code)) return refuse('400 Bad Request');
