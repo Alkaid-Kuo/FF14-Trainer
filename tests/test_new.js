@@ -20,7 +20,7 @@ for (const slot of [4, 1]) {
   const p0 = { x: s.pc.pos.x, z: s.pc.pos.z }, hp0 = s.pc.hp;
   while (s.t < 55.2) { s.input = { x: 0, z: 0 }; s.step(1 / 60); }
   const moved = Math.hypot(s.pc.pos.x - p0.x, s.pc.pos.z - p0.z);
-  if (slot === 4) ok(!s.pc.alive && /灼熱咆哮/.test(s.pc.deathCause) && moved > 8, `M1 被灼熱咆哮打到 → 死亡且屍體被擊飛 ${moved.toFixed(1)} yalm`);
+  if (slot === 4) ok(!s.pc.alive && /灼熱咆哮/.test(s.pc.deathCause) && moved > 8, `D1 被灼熱咆哮打到 → 死亡且屍體被擊飛 ${moved.toFixed(1)} yalm`);
   else ok(s.pc.alive && moved > 5 && s.pc.stats.damage > 0, `OT 被灼熱咆哮打到 → 存活、受傷並被擊退 ${moved.toFixed(1)} yalm`);
 }
 // 3) 狀態：熱風 18.9 秒、火獄之鎖、烈焰碎擊後的詛咒之炎

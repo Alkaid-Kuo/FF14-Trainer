@@ -4,7 +4,7 @@
 import json, re, sys
 SRC = sys.argv[1]
 R = 20.0
-JOB = {'战': 'MT', '骑': 'OT', '白': 'H1', '学': 'H2', '龙': 'M1', '忍': 'M2', '诗': 'R', '召': 'C'}
+JOB = {'战': 'MT', '骑': 'OT', '白': 'H1', '学': 'H2', '龙': 'D1', '忍': 'D2', '诗': 'D3', '召': 'D4'}
 PAGES = ('P4A', 'P4B', 'P4C', 'P4D', 'P5')
 NUM = r'([+-]?\d+\.\d+)'
 XY = re.compile(r'\(' + NUM + ',' + NUM + r'\)')
@@ -72,7 +72,7 @@ for line in open(SRC, encoding='utf-8'):
             cur['ents'][k] = [round(float(m.group(2)) * R, 1), round(float(m.group(3)) * R, 1)]
 
 json.dump(out, open('frames_md.json', 'w', encoding='utf-8'), ensure_ascii=False)
-KEY = ['MT', 'OT', 'H1', 'H2', 'M1', 'M2', 'R', 'C']
+KEY = ['MT', 'OT', 'H1', 'H2', 'D1', 'D2', 'D3', 'D4']
 for fid, fr in out.items():
     s = ' '.join('%s(%.1f,%.1f)' % (k, *fr['pos'][k]) for k in KEY if k in fr['pos'])
     e = ' | '.join('%s(%.1f,%.1f)' % (k, *v) for k, v in fr['ents'].items())

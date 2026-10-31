@@ -65,7 +65,7 @@ const mk = (o) => new U.Sim(Object.assign({ phase: 'p3', seed: 7, playerSlot: 4,
 {
   const s = mk({ playerSlot: 0 }); s.fastForward(55.0); s.setPlayerAuto(false);
   const z = s.s.sludge[0]; s.pc.pos.x = z.x; s.pc.pos.z = z.z;
-  run(s, 56.5, () => ({ x: 0, z: 0 }));
+  run(s, 57.6, () => ({ x: 0, z: 0 }));
   ok(!s.pc.alive && /污泥/.test(s.pc.deathCause), '踩污泥 → ' + s.pc.deathCause);
 }
 // 7) 地裂：站在線上不動 → 死
@@ -90,15 +90,15 @@ const mk = (o) => new U.Sim(Object.assign({ phase: 'p3', seed: 7, playerSlot: 4,
 }
 {
   const s = mk({ variant: 'suicide', playerSlot: 5 }); s.fastForward(50.5); s.setPlayerAuto(false);
-  ok(s.s.gaol.map((g) => g.slot).sort().join() === [2, 3, 7].sort().join(), '自殺流石牢固定點 H1/H2/C：' + s.roll.gaolTargets.join('、'));
+  ok(s.s.gaol.map((g) => g.slot).sort().join() === [2, 3, 7].sort().join(), '自殺流石牢固定點 H1/H2/D4：' + s.roll.gaolTargets.join('、'));
   run(s, 54.0); s.s.accept(5); s.setPlayerAuto(true); run(s, 170);
   const o = s.objectives();
-  ok(s.status === 'cleared' && o.every((x) => x.ok), '自殺流 M2 0:54 起身 → 通過：' + o.map((x) => (x.ok ? '✓' : '✗') + x.text).join(' / '));
+  ok(s.status === 'cleared' && o.every((x) => x.ok), '自殺流 D2 0:54 起身 → 通過：' + o.map((x) => (x.ok ? '✓' : '✗') + x.text).join(' / '));
 }
 {
   const s = mk({ variant: 'suicide', playerSlot: 6 }); s.fastForward(64); s.setPlayerAuto(false);
   run(s, 66, () => ({ x: 0, z: 0 }));
-  ok(!s.pc.alive && s.pc.raise, 'R 在 1:05 收到 C 的 10 秒復活');
+  ok(!s.pc.alive && s.pc.raise, 'D3 在 1:05 收到 D4 的 10 秒復活');
   run(s, 75, () => ({ x: 0, z: 0 }));
-  ok(s.status === 'failed' && /R 沒有接受復活/.test(s.failure.cause), 'R 不起身 → ' + (s.failure && s.failure.cause));
+  ok(s.status === 'failed' && /D3 沒有接受復活/.test(s.failure.cause), 'D3 不起身 → ' + (s.failure && s.failure.cause));
 }

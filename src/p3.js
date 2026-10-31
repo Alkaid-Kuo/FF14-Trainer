@@ -1,16 +1,16 @@
 /* P3 泰坦（覺醒前＋覺醒後）。站位／分工：攻略 P3A-F01~F28、P3B-F01~F52；時間點以攻略 mm:ss 為準（攻略沒有毫秒資料）。
-   職位對應：戰=MT 騎=OT 白=H1 學=H2 龍=M1 忍=M2 詩=R 召=C。
+   職位對應：戰=MT 騎=OT 白=H1 學=H2 龍=D1 忍=D2 詩=D3 召=D4。
    隨機：第一次跳躍方向（四個正點）、爆破岩石配置（2 種，互為鏡像）、花崗石牢點名（3 人，照優先順序站位）、地裂目標、
    第二次跳躍方向（只會往左前／正前／右前）、覺醒後花崗石牢（1 人）。
-   打法（S.variant）：'regular' 正規；'suicide' 自殺流——OT/M1/M2/R 在第二波大地之重自殺，石牢固定點 H1/H2/C，
-   H1→OT、H2→M1、C 即刻→M2、C 10 秒詠唱→R，被救的人在「三連桶炸完～開始踩地板」之間接受復活。
+   打法（S.variant）：'regular' 正規；'suicide' 自殺流——OT/D1/D2/D3 在第二波大地之重自殺，石牢固定點 H1/H2/D4，
+   H1→OT、H2→D1、D4 即刻→D2、D4 10 秒詠唱→D3，被救的人在「三連桶炸完～開始踩地板」之間接受復活。
    座標轉換：攻略圖 P3A 開場以隊伍在南（C）為準、第一次跳躍落在 D、岩石為情況 1；P3B 後半第二次跳躍落在 C。
    實際依隨機旋轉／鏡像。判定範圍是由攻略站位反推的估計值。 */
 (function (root) {
 'use strict';
 const U = root.UWU;
 const { PHASES, ROLES, inCircle, inRect, bearingOf, mulberry32, shuffler, rotateXZ, norm360, rotFromBearing } = U;
-const { MT, OT, H1, H2, M1, M2, RR, CC } = U;
+const { MT, OT, H1, H2, D1, D2, D3, D4 } = U;
 const PI = Math.PI;
 const FR = U.FRAMES;
 
@@ -18,8 +18,9 @@ const K = {
   END: 166, CHARGES: 4, EDGE: 17.2, GEO_KILL: 16, SHRINK1: 16.5, SHRINK2: 12.5,
   WOTL_R: 4, BUSTER_LEN: 14, BUSTER_HALF: PI / 3,
   IMPACT_R: 2.5, BOMB_R: 4, KB: 26, KB_DUR: 0.8,
-  LS_W: 4.2, LS_LEN: 40, GAOL_TOL: 3, GAOL_BLAST_R: 4.5, SLUDGE_R: 3, SLUDGE_DWELL: 0.4,
+  LS_W: 4.2, LS_LEN: 40, GAOL_TOL: 3, GAOL_BLAST_R: 4.5, SLUDGE_R: 6, SLUDGE_DWELL: 0.4,   // 污泥：攻略圖直徑 0.60 → 半徑 6，三攤相連
   LINK: 12.5, TITAN_REACH: 10, LOCK: 50.2,   // 石牢連鎖：相鄰石牢間距上限；靠王的污泥要在泰坦中心 10 以內（泰坦體型＋污泥）；被關住的時間
+  CHAIN_START: 6.5,                          // 引爆炸彈的爆炸碰得到的石牢距離（攻略：爆破岩石依序引爆石牢直到泰坦腳下）
   RUN_R: 11, MARGIN: 0.9, HORIZON: 3.6,
 };
 const DIR4 = { 0: 'A（北）', 90: 'B（東）', 180: 'C（南）', 270: 'D（西）' };
@@ -27,18 +28,18 @@ const TURN = { '-90': '左前', 0: '正前', 90: '右前' };
 // 爆破岩石（情況 1，泰坦在 D）：大怒震時 5 顆、之後在缺口落下第 6 顆
 const BOMBS = [[12.4, -9.5], [5.9, -3.5], [6.0, 3.9], [14.1, 3.0], [12.4, 9.7]];
 const BOMB6 = [14.2, -3.8];
-// 花崗石牢三個位置（同上座標）：泰坦位、1 號位、爆破岩石位
-const GAOL_SPOTS = [[-11.5, 0], [0, 0], [10.6, -3.0]];
+// 花崗石牢三個位置（同上座標，攻略 P3A-F25 的石牢位置）：泰坦位、1 號位、爆破岩石位
+const GAOL_SPOTS = [[-8.8, -0.2], [0.3, -0.3], [8.6, -3.2]];
 const GAOL_NAMES = ['泰坦位', '1 號位', '爆破岩石位'];
 // 站位順序：泰坦 → 龍 → 忍 → 詩 → 召 → 騎 → 白 → 學 → 爆破岩石
-const ORDER = [M1, M2, RR, CC, OT, H1, H2];
+const ORDER = [D1, D2, D3, D4, OT, H1, H2];
 // 覺醒後爆破岩石（第二次落在 C）：依序落在西南、西北、東北、東南
 const BOMBS2 = [[-3.4, 3.4], [-3.4, -3.4], [3.7, -3.4], [3.7, 3.9]];
 // 自殺流
-const SUI = [OT, M1, M2, RR];
+const SUI = [OT, D1, D2, D3];
 const RAISES = [
-  { slot: OT, by: H1, t: 35.5, how: '即刻詠唱' }, { slot: M1, by: H2, t: 36.5, how: '即刻詠唱' },
-  { slot: M2, by: CC, t: 37.5, how: '即刻詠唱' }, { slot: RR, by: CC, t: 65.0, cast: 55.0, how: '10 秒詠唱' },
+  { slot: OT, by: H1, t: 35.5, how: '即刻詠唱' }, { slot: D1, by: H2, t: 36.5, how: '即刻詠唱' },
+  { slot: D2, by: D4, t: 37.5, how: '即刻詠唱' }, { slot: D3, by: D4, t: 65.0, cast: 55.0, how: '10 秒詠唱' },
 ];
 // 起身：0:45 石牢點名前不能起；三顆石牢形成（0:50）～開始踩地板（0:55）之間起身；AI 在三連桶炸完後起（0:53.5）
 const RISE = { early: 45.0, win0: 50.2, win1: 55.5, auto: 53.5, deadline: 66.5, lastGrace: 3.5 };
@@ -70,7 +71,7 @@ function roll(seed) {
   const rng = mulberry32(seed), sh = shuffler(rng), pick = (a) => a[Math.floor(rng() * a.length)];
   const j1 = 90 * Math.floor(rng() * 4);
   const turn = pick([-90, 0, 90]);
-  const nonMT = [OT, H1, H2, M1, M2, RR, CC];
+  const nonMT = [OT, H1, H2, D1, D2, D3, D4];
   return {
     seed, j1, turn, j2: norm360(j1 + 180 + turn),
     mirror: rng() < 0.5,                 // 爆破岩石：情況 1／情況 2（鏡像）
@@ -211,10 +212,10 @@ function build(S) {
   wotl(23.0, 26.0);
   wotl(26.0, 29.0, (hit) => {
     for (const c of hit) {
-      if (sui && SUI.includes(c.slot)) S.kill(c, '自殺流：留在第二波大地之重裡', { planned: true, until: c.slot === RR ? RR_DEADLINE : RISE.deadline });
+      if (sui && SUI.includes(c.slot)) S.kill(c, '自殺流：留在第二波大地之重裡', { planned: true, until: c.slot === D3 ? RR_DEADLINE : RISE.deadline });
       else S.kill(c, '被大地之重（腳下的圈，半徑 4）擊中');
     }
-    if (sui) for (const k of SUI) if (S.chars[k].alive) fail(k, `自殺流：${ROLES[k].key} 要留在第二波大地之重裡死亡（只剩 MT／H1／H2／C 活著，石牢才會固定點 H1／H2／C）`);
+    if (sui) for (const k of SUI) if (S.chars[k].alive) fail(k, `自殺流：${ROLES[k].key} 要留在第二波大地之重裡死亡（只剩 MT／H1／H2／D4 活著，石牢才會固定點 H1／H2／D4）`);
   });
   // 第一次跳躍
   jump(30.0, 34.0, R.j1);
@@ -257,7 +258,7 @@ function build(S) {
     }
     // 連鎖：引爆炸彈的爆炸要碰到最近的石牢（炸彈端），之後一顆傳一顆（間距 ≤ LINK）
     const left = s.gaol.filter((g) => S.chars[g.slot].alive);
-    let from = xz(T1(S, BOMB6)), reach = K.BOMB_R + 1.2;
+    let from = xz(T1(S, BOMB6)), reach = K.CHAIN_START;
     s.chain = [];
     while (left.length) {
       let best = null, bd = 1e9;
@@ -279,7 +280,7 @@ function build(S) {
     S.cast('花崗石牢', 'Granite Impact（花崗岩衝擊）', 52.0, 6.0);
     // 連鎖爆炸的範圍（給 AI 與畫面）
     s.chain.forEach((g, i) => {
-      S.addFx({ kind: 'circle', x: g.pos.x, z: g.pos.z, r: K.GAOL_BLAST_R, t0: 52.0, t1: 53.0 + 0.4 * i, label: '花崗石牢（爆炸）', tint: 'earth' });
+      S.addFx({ kind: 'circle', x: g.pos.x, z: g.pos.z, r: K.GAOL_BLAST_R, t0: 52.0, t1: 53.0 + 0.4 * i, label: '花崗石牢（爆炸）', tint: 'earth', harmless: true });   // 只扣血不致死：AI 集合時不必停下來躲
       const prev = i ? s.chain[i - 1].pos : xz(T1(S, BOMB6));
       S.tethers.push({ kind: 'chain', t0: 53.0 + 0.4 * i - 0.05, t1: 53.0 + 0.4 * i + 0.35, ends: () => [[prev, g.pos]] });
     });
@@ -296,9 +297,9 @@ function build(S) {
     S.sound('rock');
     // 0:55 原地留下污泥
     const onTitan = Math.hypot(g.pos.x - titan.pos.x, g.pos.z - titan.pos.z) <= K.TITAN_REACH;
-    const z = { x: g.pos.x, z: g.pos.z, r: K.SLUDGE_R, t0: 55.0, t1: 68.0 + g.chainIdx, style: 'sludge', label: onTitan ? '污泥（泰坦踩著）' : '污泥', lethal: 55.3 };
+    const z = { x: g.pos.x, z: g.pos.z, r: K.SLUDGE_R, t0: 55.0, t1: 68.0 + g.chainIdx, style: 'sludge', label: onTitan ? '污泥（泰坦踩著）' : '污泥', lethal: 57.0 };   // 0:55 生成，秒殺級持續傷害 0:57 第一跳（攻略：0:53 還在對側的人 0:55 才到泰坦旁）
     s.sludge.push(z); S.zones.push(z);
-    S.avoid.push({ x: z.x, z: z.z, r: z.r, t0: S.t, t1: z.t1 });   // AI 一知道污泥位置就開始繞路
+    S.avoid.push({ x: z.x, z: z.z, r: z.r, t0: z.t0, t1: z.t1 });   // 污泥出現後 AI 走路繞開（出現前要先穿過去集合）
   };
   [53.0, 53.4, 53.8].forEach((t, i) => at(t, () => { const g = s.chain[i]; if (g) freeGaol(g, true); }));
   at(55.5, () => { for (const g of s.gaol) if (!g.broken) freeGaol(g, false); });
@@ -315,8 +316,8 @@ function build(S) {
 
   // ---------------------------------------------------------------- 自殺流：復活
   if (sui) {
-    s.autoAccept = { [OT]: RISE.auto, [M1]: RISE.auto, [M2]: RISE.auto, [RR]: 65.5 };
-    // 復活由技能完成：AI 補師／C 照分配的時間施放（即刻＝瞬發；R 用 10 秒讀條）；真人補師要自己按
+    s.autoAccept = { [OT]: RISE.auto, [D1]: RISE.auto, [D2]: RISE.auto, [D3]: 65.5 };
+    // 復活由技能完成：AI 補師／D4 照分配的時間施放（即刻＝瞬發；D3 用 10 秒讀條）；真人補師要自己按
     for (const r of RAISES) {
       at(r.cast || r.t, () => {
         const c = S.chars[r.slot], by = S.chars[r.by];
@@ -330,17 +331,17 @@ function build(S) {
     const late = (k, deadline) => {
       const c = S.chars[k], r = RAISES.find((x) => x.slot === k);
       if (c.alive) return;
-      if (c.raise) fail(k, k === RR ? 'R 沒有接受復活（C 的 10 秒復活到了就要起身）' : `${ROLES[k].key} 沒有接受復活（要在 0:50～0:55 起身）`);
-      else if (c.planned) fail(r.by, `${ROLES[r.by].key} 沒有復活 ${ROLES[k].key}（${k === RR ? '踩地板期間 10 秒詠唱' : '0:50 前'}）`);
+      if (c.raise) fail(k, k === D3 ? 'D3 沒有接受復活（D4 的 10 秒復活到了就要起身）' : `${ROLES[k].key} 沒有接受復活（要在 0:50～0:55 起身）`);
+      else if (c.planned) fail(r.by, `${ROLES[r.by].key} 沒有復活 ${ROLES[k].key}（${k === D3 ? '踩地板期間 10 秒詠唱' : '0:50 前'}）`);
     };
-    at(RISE.deadline, () => { for (const k of [OT, M1, M2]) late(k); });
-    at(RR_DEADLINE, () => late(RR));
+    at(RISE.deadline, () => { for (const k of [OT, D1, D2]) late(k); });
+    at(RR_DEADLINE, () => late(D3));
   }
   /** 接受復活（玩家按 F／AI 自動）。 */
   s.accept = (slot) => {
     const c = S.chars[slot];
     if (c.alive || !c.raise || S.status !== 'running') return false;
-    const t = S.t, last = slot === RR;
+    const t = S.t, last = slot === D3;
     S.raiseUp(c);
     c.stats.rise = t;
     if (!last && t < RISE.early) { fail(slot, `太早接受復活（${(t / 60 | 0)}:${String(Math.floor(t % 60)).padStart(2, '0')}）：0:45 花崗石牢點名前起身會被點到，石牢就不再固定（三顆石牢形成後再起）`); return true; }
@@ -423,7 +424,7 @@ function build(S) {
   const KB_Z = [-2.6, -2.2, -2.9, -2.4, -2.0, -3.0, -2.5, -2.8];
 
   MV(0.3, 'edge0', '大地粉碎：留在場地外圍', A0('P3A-F01', fixMT01), {
-    def: '泰坦會落在場地中央，離落點 16 以內會被秒殺：留在外圍。之後全員向泰坦移動（C 順路撿突破極限碎片）。',
+    def: '泰坦會落在場地中央，離落點 16 以內會被秒殺：留在外圍。之後全員向泰坦移動（D4 順路撿突破極限碎片）。',
   }, 'P3A-F01', { preview: false, spread: true });
   MV(4.9, 'in', '全員向泰坦集合', A0('P3A-F02'), {
     MT: '繞到泰坦另一側拉住他，讓他面向最近的正點（方便看之後跳起的面向）。', def: '在泰坦背後（MT 對面）集中站位。',
@@ -433,12 +434,12 @@ function build(S) {
   }, 'P3A-F03');
   MV(23.25, 'wotl1', '大地之重①：離開腳下的圈', A0('P3A-F04'), {
     MT: '腳下出圈（半徑 4）：往旁邊走出去（攻略：往右）。', def: '腳下出圈（半徑 4）：人群一起往旁邊走出去（攻略：往左）。',
-    sOT: '自殺流：先照常躲第一波。', sM1: '自殺流：先照常躲第一波。', sM2: '自殺流：先照常躲第一波。', sR: '自殺流：先照常躲第一波。',
+    sOT: '自殺流：先照常躲第一波。', sD1: '自殺流：先照常躲第一波。', sD2: '自殺流：先照常躲第一波。', sD3: '自殺流：先照常躲第一波。',
   }, 'P3A-F04', { preview: false });
   MV(26.25, 'wotl2', '大地之重②：走回原位', (S2) => sui4null(S2, A0('P3A-F06')(S2)), {
     def: '第二波又在腳下出圈：走回原本的位置。',
-    sOT: '自殺流：這一波不要動，留在圈裡被打死（之後 H1 會救你）。', sM1: '自殺流：這一波不要動，留在圈裡被打死（之後 H2 會救你）。',
-    sM2: '自殺流：這一波不要動，留在圈裡被打死（之後 C 即刻救你）。', sR: '自殺流：這一波不要動，留在圈裡被打死（C 會在踩地板時用 10 秒詠唱救你）。',
+    sOT: '自殺流：這一波不要動，留在圈裡被打死（之後 H1 會救你）。', sD1: '自殺流：這一波不要動，留在圈裡被打死（之後 H2 會救你）。',
+    sD2: '自殺流：這一波不要動，留在圈裡被打死（之後 D4 即刻救你）。', sD3: '自殺流：這一波不要動，留在圈裡被打死（D4 會在踩地板時用 10 秒詠唱救你）。',
   }, 'P3A-F06', { preview: false });
   MV(30.15, 'far1', '泰坦上天：去他面向的對面', A1('P3A-F07'), {
     def: (S2) => `泰坦面向 ${DIR4[S2.roll.j1]} 跳起，會落在那裡：去對面最遠處（安全區內，場地要縮小了）。`,
@@ -464,12 +465,13 @@ function build(S) {
   MV(51.2, 'ls2', '地裂②：躲開（被關的人無敵）', cur, {
     def: '再一次地裂：躲開直線，也遠離石牢（0:53 會依序爆炸）與爆破岩石。',
   }, 'P3A-F22', { preview: false });
-  MV(54.0, 'stack1', '到泰坦旁集合（踩地板）', A1('P3A-F27'), {
+  MV(53.05, 'stack1', '到泰坦旁集合（踩地板）', A1('P3A-F27'), {
     def: '石牢炸開後原地會留下污泥（踩到會死）：繞開污泥，到泰坦旁集合。泰坦踩著污泥會累積覺醒層數。',
-    sOT: '自殺流：三顆石牢形成後（0:50～0:55，建議三連桶炸完）按 F 接受復活，用普通移動走到泰坦旁。', sM1: '自殺流：三顆石牢形成後（0:50～0:55，建議三連桶炸完）按 F 接受復活，用普通移動走到泰坦旁。',
-    sM2: '自殺流：三顆石牢形成後（0:50～0:55，建議三連桶炸完）按 F 接受復活，用普通移動走到泰坦旁。', sR: '自殺流：等 C 的 10 秒復活（約 1:05），到了就起身。',
+    sOT: '自殺流：三顆石牢形成後（0:50～0:55，建議三連桶炸完）按 F 接受復活，用普通移動走到泰坦旁。', sD1: '自殺流：三顆石牢形成後（0:50～0:55，建議三連桶炸完）按 F 接受復活，用普通移動走到泰坦旁。',
+    sD2: '自殺流：三顆石牢形成後（0:50～0:55，建議三連桶炸完）按 F 接受復活，用普通移動走到泰坦旁。', sD3: '自殺流：等 D4 的 10 秒復活（約 1:05），到了就起身。',
   }, 'P3A-F27');
-  MV(65.6, 'stack2', '覺醒後：泰坦旁集合', A1('P3B-F01'), { def: '在泰坦旁集合，準備大地之重。', sR: '自殺流：收到復活就起身（按 F），回到人群。' }, 'P3B-F01', { preview: false });
+  MV(54.0, 'stack1', '到泰坦旁集合（踩地板）', A1('P3A-F27'), { def: '繼續到泰坦旁集合：0:55 污泥出現前穿過去，之後不要踩到。' }, 'P3A-F27', { preview: false });
+  MV(65.6, 'stack2', '覺醒後：泰坦旁集合', A1('P3B-F01'), { def: '在泰坦旁集合，準備大地之重。', sD3: '自殺流：收到復活就起身（按 F），回到人群。' }, 'P3B-F01', { preview: false });
   MV(67.25, 'wotl3', '大地之重①：穿過泰坦躲開', A1('P3B-F03'), { def: '腳下出圈：全員穿過泰坦到另一側（繞開污泥）。' }, 'P3B-F03', { preview: false });
   MV(70.25, 'wotl4', '大地之重②：分散', A1('P3B-F05'), { def: '第二波出圈：全員分散躲開。' }, 'P3B-F05', { preview: false });
   MV(73.3, 'ls3', '地裂（覺醒）：躲開第一波', cur, {
@@ -544,15 +546,15 @@ function objectives(S, slot) {
   const sui = S.variant === 'suicide' && SUI.includes(k);
   if (sui) {
     out.push({ ok: c.planned || st.rise !== undefined, text: '自殺流：第二波大地之重留在原地死亡' });
-    const last = k === RR;
+    const last = k === D3;
     const okRise = st.rise !== undefined && (last ? st.rise <= 65.0 + RISE.lastGrace : st.rise >= RISE.win0 && st.rise <= RISE.win1);
-    out.push({ ok: okRise, text: last ? '收到 C 的 10 秒復活就起身' : '三顆石牢形成後～開始踩地板前（0:50～0:55）起身' });
+    out.push({ ok: okRise, text: last ? '收到 D4 的 10 秒復活就起身' : '三顆石牢形成後～開始踩地板前（0:50～0:55）起身' });
     out.push({ ok: c.alive, text: '起身後存活到最後' });
   } else out.push({ ok: c.alive, text: '全程存活' });
   if (S.variant === 'suicide') {
     for (const r of RAISES.filter((x) => x.by === k)) {
-      const dl = r.slot === RR ? RR_DEADLINE - 1 : RISE.win0;
-      out.push({ ok: st.raises.some((x) => x.slot === r.slot && x.t <= dl), text: `自殺流：${r.how}復活 ${ROLES[r.slot].key}（${r.slot === RR ? '踩地板期間完成' : '0:50 前'}）` });
+      const dl = r.slot === D3 ? RR_DEADLINE - 1 : RISE.win0;
+      out.push({ ok: st.raises.some((x) => x.slot === r.slot && x.t <= dl), text: `自殺流：${r.how}復活 ${ROLES[r.slot].key}（${r.slot === D3 ? '踩地板期間完成' : '0:50 前'}）` });
     }
   }
   const g = s.gaol.find((x) => x.slot === k);
@@ -602,10 +604,10 @@ const CUES = [
   [165.0, '擊殺泰坦'],
 ];
 const CUES_SUI = [
-  [26.0, '自殺流：OT／M1／M2／R 第二波留在圈裡'],
-  [35.5, '自殺流：H1 救 OT、H2 救 M1、C 即刻救 M2（先別起身）'],
+  [26.0, '自殺流：OT／D1／D2／D3 第二波留在圈裡'],
+  [35.5, '自殺流：H1 救 OT、H2 救 D1、D4 即刻救 D2（先別起身）'],
   [50.2, '自殺流：三顆石牢形成，0:50～0:55 可以起身（F），建議三連桶炸完再起'],
-  [55.0, '自殺流：C 用 10 秒詠唱救 R'],
+  [55.0, '自殺流：D4 用 10 秒詠唱救 R'],
 ];
 
 const ROLE_DESC = [
@@ -619,14 +621,14 @@ const ROLE_DESC = [
   '開場順路撿突破極限碎片；跟人群；可能被點花崗石牢（照順序站位）。',
 ];
 const ROLE_DESC_SUI = [
-  ROLE_DESC[0] + '（自殺流：你是主仇，石牢固定點 H1／H2／C。）',
+  ROLE_DESC[0] + '（自殺流：你是主仇，石牢固定點 H1／H2／D4。）',
   '自殺流：第二波大地之重留在圈裡死亡；H1 救你，三顆石牢形成後～開始踩地板前（0:50～0:55）按 F 起身。',
-  '自殺流：即刻復活 OT（他會等石牢形成再起身）；石牢固定點你，站 1 號位（泰坦—C—H1—H2）。',
-  '自殺流：即刻復活 M1；石牢固定點你，站爆破岩石位（泰坦—C—H1—H2）。',
+  '自殺流：即刻復活 OT（他會等石牢形成再起身）；石牢固定點你，站 1 號位（泰坦—D4—H1—H2）。',
+  '自殺流：即刻復活 D1；石牢固定點你，站爆破岩石位（泰坦—D4—H1—H2）。',
   '自殺流：第二波大地之重留在圈裡死亡；H2 救你，0:50～0:55 按 F 起身。',
-  '自殺流：第二波大地之重留在圈裡死亡；C 即刻救你，0:50～0:55 按 F 起身。',
-  '自殺流：第二波大地之重留在圈裡死亡；C 在踩地板時用 10 秒詠唱救你，收到就按 F 起身。',
-  '自殺流：即刻復活 M2、踩地板時 10 秒詠唱復活 R；石牢固定點你，站泰坦位（泰坦—C—H1—H2）。',
+  '自殺流：第二波大地之重留在圈裡死亡；D4 即刻救你，0:50～0:55 按 F 起身。',
+  '自殺流：第二波大地之重留在圈裡死亡；D4 在踩地板時用 10 秒詠唱救你，收到就按 F 起身。',
+  '自殺流：即刻復活 D2、踩地板時 10 秒詠唱復活 D3；石牢固定點你，站泰坦位（泰坦—D4—H1—H2）。',
 ];
 
 PHASES.p3 = {

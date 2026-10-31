@@ -133,19 +133,19 @@ function character(role) {
     staff.add(mesh(geo('cStaffHead', () => new T.TorusGeometry(0.09, 0.02, 6, 14)), mats.trim, 0, 0.78, 0));
     staff.add(mesh(ball('cOrb', 0.07, 12, 10), glowMat(role.slot === 2 ? 0x9cffc0 : 0xe8ff9c, 1.8), 0, 0.78, 0));
     back.add(staff);
-  } else if (role.key === 'R') {
+  } else if (role.key === 'D3') {
     const bow = mesh(geo('cBow', () => new T.TorusGeometry(0.45, 0.02, 6, 24, PI)), mats.wood, 0, 0, 0);
     bow.rotation.z = PI / 2 + 0.35;
     back.add(bow);
     const quiver = mesh(geo('cQuiver', () => new T.CylinderGeometry(0.07, 0.06, 0.45, 10)), mats.cloth2, -0.12, -0.05, 0.04);
     quiver.rotation.z = -0.4; back.add(quiver);
-  } else if (role.key === 'C') {
+  } else if (role.key === 'D4') {
     const orb = mesh(ball('cCorb', 0.12, 14, 10), glowMat(0xc58bff, 1.8), 0.32, 1.85, -0.1);
     body.add(orb);
     mats.orb = orb;
     back.add(mesh(geo('cBook', () => new T.BoxGeometry(0.28, 0.34, 0.07)), std(0x4a2a6a), 0, 0, 0));
   } else {
-    const n = role.key === 'M2' ? 2 : 1;
+    const n = role.key === 'D2' ? 2 : 1;
     for (let i = 0; i < n; i++) {
       const s = new T.Group(); s.rotation.z = n === 2 ? (i ? 0.55 : -0.55) : -0.45;
       const bl = n === 2 ? 0.55 : 0.8;
@@ -156,9 +156,70 @@ function character(role) {
     }
   }
 
-  const orig = {};
-  for (const k of ['cloth', 'cloth2', 'skin', 'hair']) orig[k] = mats[k].color.clone();
-  return { group, body, legL, legR, armL, armR, head, mats, orig, phase: Math.random() * 6, dead: false };
+  const m = { group, body, legL, legR, armL, armR, head, mats, phase: Math.random() * 6, dead: false };
+  bakeCharacter(m);
+  return m;
+}
+
+// 效能：每個角色原本約 27 個網格（每個一次繪圖呼叫）。同一個不會動的部件（身體＋頭＋背上武器、每條腿、每隻手臂）
+// 依「霧面／金屬」合成一個網格，顏色寫進頂點，8 個角色共用兩個材質；會發光的零件（寶珠）維持獨立。
+const CHAR_MATTE = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.05 });
+const CHAR_METAL = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, metalness: 0.65 });
+const TINTED = ['cloth', 'cloth2', 'skin', 'hair'];   // 倒地時變灰的材質
+const METALLIC = ['trim', 'metal'];
+function bakeCharacter(m) {
+  m.group.updateMatrixWorld(true);
+  const keyOf = new Map(Object.entries(m.mats).filter(([, v]) => v.isMaterial).map(([k, v]) => [v, k]));
+  const skip = new Set([m.legL, m.legR, m.armL, m.armR, m.mats.orb]);
+  m.baked = [];
+  for (const root of [m.body, m.legL, m.legR, m.armL, m.armR]) {
+    const inv = new T.Matrix4().copy(root.matrixWorld).invert();
+    const parts = { matte: [], metal: [] };
+    root.traverse((o) => {
+      if (o === root || !o.isMesh) return;
+      for (let p = o.parent; p !== root; p = p.parent) if (skip.has(p)) return;
+      if (skip.has(o) || (o.material.emissive && o.material.emissive.getHex() !== 0)) return;   // 會動、會發光的零件不合併
+      const key = keyOf.get(o.material);
+      parts[METALLIC.includes(key) ? 'metal' : 'matte'].push({ o, key, mat: new T.Matrix4().multiplyMatrices(inv, o.matrixWorld) });
+    });
+    for (const kind of ['matte', 'metal']) {
+      const list = parts[kind];
+      if (!list.length) continue;
+      const merged = mergeParts(list);
+      for (const { o } of list) o.parent.remove(o);
+      const mesh = new T.Mesh(merged, kind === 'metal' ? CHAR_METAL : CHAR_MATTE);
+      mesh.castShadow = true;
+      root.add(mesh);
+      m.baked.push(mesh);
+    }
+  }
+}
+/** 合併幾何（套用相對位置），並準備「活著」與「倒地（變灰）」兩組頂點顏色。 */
+function mergeParts(list) {
+  let nv = 0, ni = 0;
+  const geos = list.map(({ o, mat }) => { const g = o.geometry.clone().applyMatrix4(mat); nv += g.attributes.position.count; ni += g.index.count; return g; });
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), alive = new Float32Array(nv * 3), dead = new Float32Array(nv * 3);
+  const idx = new Uint32Array(ni);
+  let v = 0, i = 0;
+  const c = new T.Color(), d = new T.Color();
+  geos.forEach((g, gi) => {
+    const { o, key } = list[gi], n = g.attributes.position.count;
+    pos.set(g.attributes.position.array, v * 3); nor.set(g.attributes.normal.array, v * 3);
+    c.copy(o.material.color); d.copy(c); if (TINTED.includes(key)) d.lerp(GRAY, 0.75);
+    for (let k = 0; k < n; k++) { alive.set([c.r, c.g, c.b], (v + k) * 3); dead.set([d.r, d.g, d.b], (v + k) * 3); }
+    const src = g.index.array;
+    for (let k = 0; k < src.length; k++) idx[i + k] = src[k] + v;
+    v += n; i += src.length;
+    g.dispose();
+  });
+  const out = new T.BufferGeometry();
+  out.setAttribute('position', new T.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new T.BufferAttribute(nor, 3));
+  out.setAttribute('color', new T.BufferAttribute(alive.slice(), 3));
+  out.setIndex(new T.BufferAttribute(idx, 1));
+  out.userData.alive = alive; out.userData.dead = dead;
+  out.computeBoundingSphere();
+  return out;
 }
 
 const GRAY = new T.Color(0x5a5f68);
@@ -176,9 +237,9 @@ function animateCharacter(m, dt, t, walk) {
 function setCharacterDead(m, dead) {
   if (m.dead === dead) return;
   m.dead = dead;
-  for (const k of Object.keys(m.orig)) {
-    if (dead) m.mats[k].color.copy(m.orig[k]).lerp(GRAY, 0.75);
-    else m.mats[k].color.copy(m.orig[k]);
+  for (const mesh of m.baked) {
+    const g = mesh.geometry, col = g.attributes.color;
+    col.array.set(dead ? g.userData.dead : g.userData.alive); col.needsUpdate = true;
   }
   m.legL.rotation.x = 0; m.legR.rotation.x = 0;
 }

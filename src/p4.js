@@ -1,18 +1,18 @@
 /* P4 究極神兵：P4A 拉哈布雷亞、P4B 追擊之究極幻想、P4C 爆擊之究極幻想、P4D 亂擊之究極幻想。
    站位／分工：攻略 P4A-F01~F08、P4B-F02~F26、P4C-F01~F37、P4D-F02~F24（由攻略的文字座標換算，gen/extract_md.py）。
-   職位對應：戰=MT 騎=OT 白=H1 學=H2 龍=M1 忍=M2 詩=R 召=C。
+   職位對應：戰=MT 騎=OT 白=H1 學=H2 龍=D1 忍=D2 詩=D3 召=D4。
    時間：P4A 照攻略；究極之後的過場動畫（0:57～1:34）縮短成 4 秒，P4B 之後的 0:00＝本階段 1:01（tb()）。
-   P4A 的重點是極限技：C 法系 LB3（浮游炮）、H1 治療 LB3（死亡宣告）、M2 近戰 LB3（拉哈布雷亞）、OT 坦克 LB3（究極）；
+   P4A 的重點是極限技：D4 法系 LB3（浮游炮）、H1 治療 LB3（死亡宣告）、D2 近戰 LB3（拉哈布雷亞）、OT 坦克 LB3（究極）；
    P4D 結尾的第二次究極也要 OT 的坦克 LB3。負責的職位是真人時要自己按（時機錯就團滅），是 AI 時照攻略的時間自動使用。
    隨機：追擊之究極幻想時迦樓羅／伊弗利特／泰坦／究極神兵的出現位置、地裂的目標、火獄之鎖的 DPS；
    爆擊之究極幻想時伊弗利特／泰坦在西南或東南、灼熱咆哮的補師、中高壓的對象、烈焰碎擊的對象；
    亂擊之究極幻想時地火噴發／花崗石牢／寒風之歌／光柱的對象、魔科學激光的路徑、中高壓與烈焰碎擊的對象。
-   P1 遺留的低氣壓：OT、H1、H2、C 各 1 層（擋中高壓用）。判定範圍是估計值（攻略圖不是按比例畫的）。 */
+   P1 遺留的低氣壓：OT、H1、H2、D4 各 1 層（擋中高壓用）。判定範圍是估計值（攻略圖不是按比例畫的）。 */
 (function (root) {
 'use strict';
 const U = root.UWU;
 const { PHASES, ROLES, isTank, inCircle, inRect, atBearing, bearingOf, mulberry32, shuffler, segInfo, dist, ENMITY } = U;
-const { MT, OT, H1, H2, M1, M2, RR, CC } = U;
+const { MT, OT, H1, H2, D1, D2, D3, D4 } = U;
 const PI = Math.PI;
 const FR = U.FRAMES;
 
@@ -36,9 +36,9 @@ const K = {
 };
 /** P4A 的極限技：誰負責、什麼種類、什麼時候（from～by 之間按），AI 在 ai 秒使用。 */
 const LB_TASKS = [
-  { kind: 'caster', slot: CC, from: 8.5, ai: 9.0, by: 14.5, what: '0:09～0:14 法系 LB3（萬億核爆）：擊殺魔導浮游炮' },
+  { kind: 'caster', slot: D4, from: 8.5, ai: 9.0, by: 14.5, what: '0:09～0:14 法系 LB3（萬億核爆）：擊殺魔導浮游炮' },
   { kind: 'healer', slot: H1, from: 26.0, ai: 26.1, by: 30.5, what: '0:26～0:30 治療 LB3（生命鼓動）：解除死亡宣告' },
-  { kind: 'melee', slot: M2, from: 38.0, ai: 38.3, by: 40.5, what: '0:38～0:40 近戰 LB3（月遁血祭）：擊殺拉哈布雷亞' },
+  { kind: 'melee', slot: D2, from: 38.0, ai: 38.3, by: 40.5, what: '0:38～0:40 近戰 LB3（月遁血祭）：擊殺拉哈布雷亞' },
   { kind: 'tank', slot: OT, from: 48.0, ai: 48.3, by: 56.5, what: '0:48～0:56 坦克 LB3（終極堡壘）：扛下究極' },
   { kind: 'tank', slot: OT, from: B + 231, ai: B + 232, by: B + 239.5, what: '3:51～3:59 坦克 LB3（終極堡壘）：扛下第二次究極' },
 ];
@@ -59,7 +59,7 @@ const tipf = (m) => (slot, S) => {
   const d = g !== undefined ? g : (m.def || '');
   return typeof d === 'function' ? d(S, slot) : d;
 };
-const NON_TANKS_ORDER = [H1, H2, M1, M2, RR, CC];
+const NON_TANKS_ORDER = [H1, H2, D1, D2, D3, D4];
 const xz = (p) => ({ x: p[0], z: p[1] });
 /** 繞場中心轉 deg 度（順時針為正，跟方位角一樣）。 */
 const turn = (p, deg) => { const b = bearingOf(xz(p)) + deg, r = Math.hypot(p[0], p[1]), q = atBearing(b, r); return [q.x, q.z]; };
@@ -72,14 +72,14 @@ function roll(seed) {
     seed,
     // 追擊之究極幻想：迦樓羅在 1 號位偏向某個斜點、伊弗利特在場外斜點、泰坦在正點兩側、究極神兵在另一個斜點
     pg: 45 + 90 * Math.floor(rng() * 4), pi: 45 + 90 * ifr, pt: 90 * Math.floor(rng() * 4) + pick([-10, 10]), pu: 45 + 90 * pick(ultChoices),
-    fettersDps: pick([M1, M2, RR, CC]),
+    fettersDps: pick([D1, D2, D3, D4]),
     ls: [rng(), rng(), rng()],
     lsTargets: [],
     // 爆擊之究極幻想：伊弗利特在西南（攻略圖）或東南（左右鏡像）、灼熱咆哮的補師、兩次中高壓的對象、烈焰碎擊的對象
     ann: { ifritSW: rng() < 0.5, sear: pick([H1, H2]), meso: [rng(), rng()], crush: rng() },
     // 亂擊之究極幻想：6 名非坦克依序 3 人地火噴發（其中 1 人花崗石牢）、2 人寒風之歌、1 人光柱；魔科學激光 3 次的路徑
     sup: (() => {
-      const nt = sh([H1, H2, M1, M2, RR, CC]), erupt = nt.slice(0, 3);
+      const nt = sh([H1, H2, D1, D2, D3, D4]), erupt = nt.slice(0, 3);
       return { erupt, gaol: erupt[Math.floor(rng() * 3)], song: nt.slice(3, 5), pillar: nt[5], lasers: [0, 1, 2].map(() => Math.floor(rng() * 3)), meso: rng(), crush: rng() };
     })(),
   };
@@ -94,7 +94,7 @@ function setup(S) {
   s.charges = 0; s.woken = false;
   s.orbs = []; s.feathers = []; s.featherOn = false; s.steer = []; s.meso = {}; s.mesoBy = {}; s.mesoLog = []; s.songs = [null, null]; s.gw = [null, null];
   s.searWho = null; s.gaolWho = null; s.pillarWho = null;
-  for (const k of [OT, H1, H2, CC]) S.chars[k].thermal = 1;   // P1 遺留的低氣壓（擋中高壓用）
+  for (const k of [OT, H1, H2, D4]) S.chars[k].thermal = 1;   // P1 遺留的低氣壓（擋中高壓用）
 }
 
 function build(S) {
@@ -118,7 +118,7 @@ function build(S) {
   }
   at(3.0, () => S.log('A、B、C、D 出現 4 個導彈落點：全員待在 1 號位'));
   [9.0, 9.25, 9.5, 9.75].forEach((t) => at(t, () => raid('誘導爆炸', 8, 0.5)));
-  // 魔導浮游炮：出現後立刻讀條自爆，讀條結束前要擊殺（C 的法系 LB3）
+  // 魔導浮游炮：出現後立刻讀條自爆，讀條結束前要擊殺（D4 的法系 LB3）
   at(11.0, () => {
     s.bits = Object.values(FR['P4A-F04'].ents).map((p) => { const a = S.actor('bit', '魔導浮游炮', p[0], p[1], 0); a.rot = Math.atan2(-p[0], -p[1]); return a; });
     S.cast('魔導浮游炮', '自爆', 11.0, K.BITS_BOOM - 11.0);
@@ -128,7 +128,7 @@ function build(S) {
     if (s.bitsDown) return;
     for (const b of s.bits) S.despawn(b);
     S.screenFx.push({ t: S.t, type: 'raidwide', power: 1 });
-    wipe(CC, '魔導浮游炮自爆：沒有在讀條結束前擊殺（C 要在 0:09～0:14 用法系 LB3）');
+    wipe(D4, '魔導浮游炮自爆：沒有在讀條結束前擊殺（D4 要在 0:09～0:14 用法系 LB3）');
   });
   // 拉哈布雷亞：死亡宣告（治療 LB3 才能解除）＋擊倒（5 秒無法行動）
   at(20.5, () => S.cast('拉哈布雷亞', '死亡宣告', 20.5, 1.5));
@@ -142,9 +142,9 @@ function build(S) {
   at(31.0, () => {
     s.laha = S.actor('lahabrea', '拉哈布雷亞', 0.6, -0.4, PI);
     S.cast('拉哈布雷亞', '冥暗', 31.0, 15.0);
-    S.log('拉哈布雷亞出現並讀條冥暗（15 秒後全滅）：M2 用近戰 LB3 擊殺');
+    S.log('拉哈布雷亞出現並讀條冥暗（15 秒後全滅）：D2 用近戰 LB3 擊殺');
   });
-  at(46.0, () => { if (s.laha && !s.laha.dead) { S.despawn(s.laha); wipe(M2, '冥暗：拉哈布雷亞沒有被擊殺（M2 要在 0:38～0:40 用近戰 LB3）'); } });
+  at(46.0, () => { if (s.laha && !s.laha.dead) { S.despawn(s.laha); wipe(D2, '冥暗：拉哈布雷亞沒有被擊殺（D2 要在 0:38～0:40 用近戰 LB3）'); } });
   // 究極神兵：究極（全屏超高額傷害）要開坦克 LB3 扛
   at(48.0, () => { show(ult, true); ult.pos.x = 0; ult.pos.z = -9.2; ult.rot = 0; S.log('究極神兵出現（不可選中）：OT 開坦克 LB3'); });
   at(51.0, () => { S.cast('究極神兵', '究極', 51.0, 6.0); });
@@ -502,9 +502,9 @@ function build(S) {
     at(tRes, () => { for (const c of S.alive()) if (spots.some((p) => inCircle(c.pos, p, K.WOL_R))) S.kill(c, '被大地之重（覺醒）擊中：圈出現就要離開'); S.sound('rock'); });
   };
   weight(tb(108), tb(111)); weight(tb(111), tb(114)); weight(tb(114), tb(117));
-  crush(tb(108), tb(113), AN.crush, [MT, OT, H1, H2, M1, M2, RR, CC]);
+  crush(tb(108), tb(113), AN.crush, [MT, OT, H1, H2, D1, D2, D3, D4]);
   eye(tb(111), tb(114), 'Garuda');
-  meso('m1', tb(111), tb(117), AN.meso[0], [CC, H2, H1, RR, M1, M2], '第一次（C）');
+  meso('m1', tb(111), tb(117), AN.meso[0], [D4, H2, H1, D3, D1, D2], '第一次（D4）');
   steer(tb(114.05), tb(117), (S2) => (S2.s.meso.m1 ? S2.s.meso.m1.by : null), mesoSpot('m1', 10));
   // 以太炸彈：究極神兵左腳前，OT 撞掉（tick 判定）
   const orb = (t) => at(t, () => {
@@ -515,7 +515,7 @@ function build(S) {
   [114, 120, 127, 133].forEach((t) => orb(tb(t)));
   // 伊弗利特：灼熱咆哮（覺醒）點名 1 名補師，每 6 秒一次大範圍（半徑 14）
   at(tb(118), () => {
-    s.searWho = S.pickAlive(AN.sear, [H1, H2, CC, RR, M1, M2]);
+    s.searWho = S.pickAlive(AN.sear, [H1, H2, D4, D3, D1, D2]);
     const h = S.chars[s.searWho];
     h.searing = true; S.addStatus(h.slot, 'searing', 29.5);
     S.cast('伊弗利特', '灼熱咆哮（覺醒）', tb(118), 1.0);
@@ -774,10 +774,10 @@ function build(S) {
     show(s.ifrit, true); s.ifrit.pos.x = 14.8; s.ifrit.pos.z = 14.2; face(s.ifrit, { x: 0, z: 0 });
   });
   landslideC('泰坦', () => s.titan.pos, tb(214), tb(216.5), tb(219));
-  meso('m3', tb(214), tb(220), SU.meso, [OT, MT, H2, H1, CC, RR, M1, M2], '第三次（OT）');
+  meso('m3', tb(214), tb(220), SU.meso, [OT, MT, H2, H1, D4, D3, D1, D2], '第三次（OT）');
   steer(tb(214.05), tb(217.15), (S2) => (S2.s.meso.m3 ? S2.s.meso.m3.by : null), mesoSpot('m3', 9.9));
   steer(tb(217.15), tb(220), (S2) => (S2.s.meso.m3 ? S2.s.meso.m3.by : null), mesoSpot('m3', 7.2));
-  crush(tb(215), tb(220), SU.crush, [MT, H1, H2, M1, M2, RR, CC]);
+  crush(tb(215), tb(220), SU.crush, [MT, H1, H2, D1, D2, D3, D4]);
   at(tb(221), () => { S.despawn(s.ifrit); S.despawn(s.titan); s.ifrit = null; s.titan = null; });
   nuke(tb(221), tb(227));
   at(tb(222), () => show(s.garuda, false));
@@ -802,19 +802,19 @@ function build(S) {
   const center = () => all([0, 0]);
   MV(0.2, 'center', '全員 1 號位集合', center, {
     def: '泰坦消失。全員在 1 號位（場地中央）集合：A／B／C／D 會落下導彈，離落點越近越痛。',
-    C: '全員在 1 號位集合。0:09 用法系 LB3（技能列的 LB）打魔導浮游炮。',
+    D4: '全員在 1 號位集合。0:09 用法系 LB3（技能列的 LB）打魔導浮游炮。',
   }, 'P4A-F01', { spread: true });
   MV(10.6, 'bits', '魔導浮游炮：分散輸出', () => fp('P4A-F04'), {
-    C: '魔導浮游炮出現：法系 LB3 如果還沒放，馬上放（0:14 之前），其他人補刀。',
-    def: '6 個魔導浮游炮出現並讀條自爆：照圖分散去打（C 的法系 LB3 已經打到大部分血量）。',
+    D4: '魔導浮游炮出現：法系 LB3 如果還沒放，馬上放（0:14 之前），其他人補刀。',
+    def: '6 個魔導浮游炮出現並讀條自爆：照圖分散去打（D4 的法系 LB3 已經打到大部分血量）。',
   }, 'P4A-F04', { preview: false });
   MV(18.2, 'center2', '全員 1 號位集合', center, {
     H1: '回 1 號位。0:22 拉哈布雷亞會給全員死亡宣告並擊倒 4 秒，0:26 能動之後立刻用治療 LB3（技能列的 LB）。',
     def: '回 1 號位集合。0:22 死亡宣告＋擊倒（全員不能動），等 H1 的治療 LB3。',
   }, 'P4A-F06', { spread: true });
   MV(31.2, 'laha', '拉哈布雷亞：全員在 1 號位輸出', () => fp('P4A-F07'), {
-    M2: '拉哈布雷亞讀條冥暗（15 秒後全滅）：0:38 極限技槽滿了就用近戰 LB3（技能列的 LB）擊殺他。',
-    def: '拉哈布雷亞讀條冥暗：等 M2 的近戰 LB3 擊殺。',
+    D2: '拉哈布雷亞讀條冥暗（15 秒後全滅）：0:38 極限技槽滿了就用近戰 LB3（技能列的 LB）擊殺他。',
+    def: '拉哈布雷亞讀條冥暗：等 D2 的近戰 LB3 擊殺。',
   }, 'P4A-F07', { preview: false });
   MV(46.4, 'ultima', '究極神兵出現：準備扛究極', center, {
     OT: '究極神兵出現：0:48 極限技槽滿了就用坦克 LB3（技能列的 LB），全員才扛得住 0:57 的究極。',
@@ -841,15 +841,15 @@ function build(S) {
   MV(tb(43.05), 'b-rain', '飛翎雨：回 1 號位附近', (S2) => fp('P4B-F12').map((p) => repel(p, S2.s.rain || [], K.RAIN_R + 1.0)), {
     def: '迦樓羅上天：腳下會被鎖定飛翎雨，立刻往 1 號位移動。',
   }, 'P4B-F12', { preview: false });
-  MV(tb(45.6), 'b-f13', '究極神兵回到場中：R 去 D、C 去 B', () => fp('P4B-F13'), {
-    R: '去 D 點（場地西邊緣）：之後地火噴發會點你，沿場邊往 C 跑。', C: '去 B 點（場地東邊緣）：之後地火噴發會點你，沿場邊往 C 跑。',
+  MV(tb(45.6), 'b-f13', '究極神兵回到場中：D3 去 D、D4 去 B', () => fp('P4B-F13'), {
+    D3: '去 D 點（場地西邊緣）：之後地火噴發會點你，沿場邊往 C 跑。', D4: '去 B 點（場地東邊緣）：之後地火噴發會點你，沿場邊往 C 跑。',
     def: '在究極神兵南側（1 號位旁）集合。',
   }, 'P4B-F13');
   const ERUPT_RUN = [[56.1, 'P4B-F15'], [58.1, 'P4B-F16'], [60.1, 'P4B-F17']];
   for (const [t, id] of ERUPT_RUN) {
-    MV(tb(t), 'erupt', '地火噴發：R／C 沿場邊跑', () => { const a = fp(id); return only([[RR, a[RR]], [CC, a[CC]]]); }, {
-      R: '地火噴發在你腳下：沿場邊往 C 點跑（每 2 秒一圈，半徑 8）。', C: '地火噴發在你腳下：沿場邊往 C 點跑（每 2 秒一圈，半徑 8）。',
-      def: '留在究極神兵南側，不要靠近 R／C 的路線。',
+    MV(tb(t), 'erupt', '地火噴發：D3／D4 沿場邊跑', () => { const a = fp(id); return only([[D3, a[D3]], [D4, a[D4]]]); }, {
+      D3: '地火噴發在你腳下：沿場邊往 C 點跑（每 2 秒一圈，半徑 8）。', D4: '地火噴發在你腳下：沿場邊往 C 點跑（每 2 秒一圈，半徑 8）。',
+      def: '留在究極神兵南側，不要靠近 D3／D4 的路線。',
     }, id, { preview: false, jitter: false });
   }
   MV(tb(62.4), 'b-f18', '全員在究極神兵正面前集合', () => fp('P4B-F18'), {
@@ -875,7 +875,7 @@ function build(S) {
   }, 'P4B-F26', { preview: false, jitter: false });
 
   // ---------------------------------------------------------------- P4C 走位
-  // 攻略圖的分工：伊弗利特在西南、H1 灼熱咆哮、C 擋第一次中高壓。實際分工不同時把站位換給實際的人；mirror：伊弗利特在東南時左右鏡像（OT 不鏡像）
+  // 攻略圖的分工：伊弗利特在西南、H1 灼熱咆哮、D4 擋第一次中高壓。實際分工不同時把站位換給實際的人；mirror：伊弗利特在東南時左右鏡像（OT 不鏡像）
   const swap = (a, x, y) => { if (x !== y && x !== null && y !== null) { const t = a[x]; a[x] = a[y]; a[y] = t; } };
   const posC = (id, o) => (S2) => {
     const a = fp(id), opt = o || {};
@@ -904,12 +904,12 @@ function build(S) {
   MV(tb(104.6), 'c-f02', '到究極神兵右腳前集合', posC('P4C-F02'), { def: '究極神兵出現在 A 點前（面向南）：全員到他右腳前（西側）集合。' }, 'P4C-F02', { spread: true });
   MV(tb(108.05), 'c-wol1', '大地之重①：移到左腳前', posC('P4C-F04'), { def: '大地之重落在腳下：全員移到究極神兵左腳前（東側）。烈焰碎擊要 8 人一起分攤。' }, 'P4C-F04', { spread: true, jitter: false });
   MV(tb(111.05), 'c-wol2', '大地之重②：移到右腳前', posC('P4C-F06'), { def: '大地之重第 2 輪：全員移回右腳前（西側）。迦樓羅放台風眼（要在場中半徑 13 以內）、中高壓連線。' }, 'P4C-F06', { spread: true, jitter: false });
-  MVO(tb(114.05), 'c-wol3', '大地之重③：順時針繞開；OT 撞球、C 擋中高壓', posC('P4C-F07', { meso: ['m1', 10, CC] }), {
+  MVO(tb(114.05), 'c-wol3', '大地之重③：順時針繞開；OT 撞球、D4 擋中高壓', posC('P4C-F07', { meso: ['m1', 10, D4] }), {
     OT: '以太炸彈出現在究極神兵左腳前：去撞掉（之後還有 3 個，一樣由你撞）。',
-    C: '用 P1 遺留的低氣壓擋中高壓：站在迦樓羅和被連線者之間的線上（往 C 點方向）。',
+    D4: '用 P1 遺留的低氣壓擋中高壓：站在迦樓羅和被連線者之間的線上（往 C 點方向）。',
     def: '大地之重第 3 輪：貼著究極神兵順時針繞到西北側，離以太炸彈遠一點。',
   }, 'P4C-F07', { jitter: false });
-  MV(tb(117.1), 'c-f09', '擋完中高壓：回人群', (S2) => { const by = S2.s.mesoBy.m1; return by === null || by === undefined ? Array(8).fill(null) : only([[by, posC('P4C-F09')(S2)[CC]]]); }, {
+  MV(tb(117.1), 'c-f09', '擋完中高壓：回人群', (S2) => { const by = S2.s.mesoBy.m1; return by === null || by === undefined ? Array(8).fill(null) : only([[by, posC('P4C-F09')(S2)[D4]]]); }, {
     def: '擋完中高壓：回人群（先往西繞開以太炸彈的位置）。',
   }, 'P4C-F09', { preview: false, jitter: false });
   MVO(tb(118.05), 'c-rain1', '飛翎雨：往北邊場邊；灼熱咆哮的補師往 C 跑', posC('P4C-F10', { rain: true }), {
@@ -967,10 +967,10 @@ function build(S) {
   mesoGuide('m2', 8, [tb(129.2), tb(130.2)], '擋中高壓：站在迦樓羅（C）和被連線者之間的線上（台風眼結束前要在場中半徑 13 以內）。');
   mesoGuide('m2', 4.2, [tb(131.6), tb(132.6), tb(133.4)], '擋中高壓：靠近迦樓羅，留在線上。');
   // ---------------------------------------------------------------- P4D 走位
-  // 攻略圖的分工：M1 花崗石牢；實際被關的人不同時對調站位
+  // 攻略圖的分工：D1 花崗石牢；實際被關的人不同時對調站位
   const posD = (id, o) => (S2) => {
     const a = fp(id), opt = o || {};
-    swap(a, M1, S2.s.gaolWho !== null ? S2.s.gaolWho : SU.gaol);
+    swap(a, D1, S2.s.gaolWho !== null ? S2.s.gaolWho : SU.gaol);
     if (opt.meso) {
       const th = S2.s.meso.m3;
       if (th && th.by !== null) { swap(a, OT, th.by); const p = mesoSpot('m3', opt.meso)(S2); if (p) a[th.by] = p; }
@@ -1159,7 +1159,7 @@ function objectives(S, slot) {
     if (slot === MT) out.push({ ok: !st.stickyHits, text: '吸附以太炸彈：遠離人群單吃（沒有波及隊友）' });
     if (slot === OT) out.push({ ok: !st.laserHits, text: '誘導射線：遠離人群單吃（沒有波及隊友）' });
   }
-  if (S.t >= tb(65) && (slot === RR || slot === CC)) out.push({ ok: !st.eruptHits, text: '地火噴發：沿場邊跑，沒有炸到隊友' });
+  if (S.t >= tb(65) && (slot === D3 || slot === D4)) out.push({ ok: !st.eruptHits, text: '地火噴發：沿場邊跑，沒有炸到隊友' });
   const s = S.s;
   if (S.t >= tb(134) && slot === OT) out.push({ ok: (st.orbPops || 0) >= 4, text: '以太炸彈：4 個都由你撞掉' });
   for (const m of s.mesoLog) if (m.slot === slot) out.push({ ok: m.ok, text: `中高壓${m.label}：用低氣壓擋線` });
@@ -1192,11 +1192,11 @@ const CHECKPOINTS = [
 const CUES = [
   [0, '全員 1 號位集合（極限技槽已滿）'],
   [3, 'A／B／C／D 誘導爆炸：待在場地中央'],
-  [9, 'C：法系 LB3（萬億核爆）'],
+  [9, 'D4：法系 LB3（萬億核爆）'],
   [11, '6 個魔導浮游炮讀條自爆：讀條結束前要擊殺'],
   [22, '死亡宣告＋擊倒：0:26 能動後 H1 用治療 LB3'],
   [31, '拉哈布雷亞讀條冥暗（15 秒）'],
-  [38, 'M2：近戰 LB3（月遁血祭）擊殺拉哈布雷亞'],
+  [38, 'D2：近戰 LB3（月遁血祭）擊殺拉哈布雷亞'],
   [48, 'OT：坦克 LB3（終極堡壘）'],
   [57, '究極（全屏超高額傷害）'],
   [tb(0), '究極神兵可以選中：魔導核爆'],
@@ -1206,8 +1206,8 @@ const CUES = [
   [tb(29), '四召喚獸出現：找迦樓羅，去離她遠、沒有泰坦的正點'],
   [tb(38), '第 1 輪結束：躲地裂第二波、青磷放射'],
   [tb(43), '迦樓羅上天：飛翎雨，回 1 號位'],
-  [tb(46), 'R 去 D、C 去 B'],
-  [tb(56), '地火噴發 ×4：R／C 沿場邊往 C 跑'],
+  [tb(46), 'D3 去 D、D4 去 B'],
+  [tb(56), '地火噴發 ×4：D3／D4 沿場邊往 C 跑'],
   [tb(63), '全員在究極神兵正面前；火獄之鎖'],
   [tb(66), '光輝炎柱：原地躲'],
   [tb(70), '爆破岩石 ×6、泰坦地裂（兩波）、究極神兵地裂：到南邊場邊'],
@@ -1219,7 +1219,7 @@ const CUES = [
   [tb(96), '爆擊之究極幻想：MT 挑釁，全員 1 號位'],
   [tb(105), '究極神兵在 A 點前：全員到他右腳前'],
   [tb(108), '大地之重 ×3：右腳→左腳→右腳；烈焰碎擊 8 人分攤'],
-  [tb(111), '台風眼（半徑 13 以內）＋中高壓：C 用低氣壓擋線'],
+  [tb(111), '台風眼（半徑 13 以內）＋中高壓：D4 用低氣壓擋線'],
   [tb(114), '以太炸彈：OT 撞；其他人順時針繞到西北'],
   [tb(118), '灼熱咆哮（覺醒）：被點的補師往 C 跑；飛翎雨'],
   [tb(122), '深紅旋風（俯衝）＋泰坦覺醒地裂'],
@@ -1260,6 +1260,7 @@ const ROLE_DESC = [
 PHASES.p4 = {
   id: 'p4', name: 'P4 究極神兵', short: '究極神兵', preRoll: -3, end: K.END, maxCharges: 0, chargeLabel: '',
   bossLook: ['bit', 'lahabrea', 'ultima'], bossR: 4, activeTank: (S) => S.s.tank,
+  waymarks: { 2: [K.WM2[0], K.WM2[1]] },   // 攻略 P4 的 2 號標點（花崗石牢跑這裡）
   checkpoints: CHECKPOINTS, cues: CUES, roleDesc: ROLE_DESC,
   roll, setup, build, tick, objectives,
   /** 輪到這個職位用極限技（技能列的 LB 會閃）。 */

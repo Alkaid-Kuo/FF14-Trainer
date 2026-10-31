@@ -1,7 +1,7 @@
 /* UI 控制：階段（含完整體驗）、模式、職位、起始點、輸入、HUD、音效、結算。 */
 (function () {
 'use strict';
-const { Sim, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR, SKILLS, LOADOUT, GCD, skillCheck, bossOf, meleeReach, raiseTarget } = window.UWU;
+const { Sim, C, ROLES, PHASES, STATUS_DEF, WAYMARKS, WM_COLOR, SKILLS, LOADOUT, GCD, skillCheck, bossOf, bossList, hitboxR, meleeReach, raiseTarget } = window.UWU;
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;
 const PHASE_ORDER = ['p1', 'p2', 'p3', 'p4'];  // 已完成的階段（依戰鬥順序）
@@ -12,7 +12,7 @@ const S = {
   phase: 'ready', seed: 0, sim: null, keys: new Set(), acc: 0, dismissed: false, p3v: 'regular',
   ci: 0, offset: 0, chainLog: [],
   death: { solo: 'stop', net: 'continue' },   // 有人倒地時：單人預設立即重來、連線預設繼續打
-  target: null, held: null,                   // 復活目標（點隊伍列表）、按住的技能鍵
+  target: null, btarget: null, held: null,    // 隊友目標（復活用：點隊伍列表或角色）、Boss 目標（Tab／點擊；actor id）、按住的技能鍵
 };
 const deathMode = () => (netOn() ? S.death.net : S.death.solo);
 let r2d = null, r3d = null;
@@ -68,7 +68,7 @@ function buildSide() {
   const roles = $('roles');
   ROLES.forEach((r) => {
     const b = document.createElement('button');
-    b.className = 'role'; b.textContent = r.key; b.style.background = r.color; b.title = r.name; b.dataset.slot = r.slot;
+    b.className = 'role'; b.innerHTML = `${r.key}<small></small>`; b.style.background = r.color; b.title = r.name; b.dataset.slot = r.slot;
     b.addEventListener('click', () => { b.blur(); pickRole(r.slot); });
     roles.appendChild(b);
   });
@@ -103,7 +103,7 @@ function buildSide() {
   $('b-demo').addEventListener('click', (e) => { e.currentTarget.blur(); toggleDemo(); });
   $('banner').addEventListener('click', (e) => { if (e.target.closest('[data-act="start"]')) { e.target.blur(); startPause(); } });
   $('togglepanel').addEventListener('click', (e) => { e.currentTarget.blur(); togglePanel(); });
-  $('keys').innerHTML = '<kbd>WASD</kbd> 移動　<kbd>Space</kbd> 開始/暫停<br><kbd>R</kbd> 重來　<kbd>N</kbd> 換隨機　<kbd>V</kbd> 視角　<kbd>P</kbd> AI 代打';
+  $('keys').innerHTML = '<kbd>WASD</kbd> 移動　<kbd>Space</kbd> 開始/暫停<br><kbd>R</kbd> 重來　<kbd>N</kbd> 換隨機　<kbd>V</kbd> 視角　<kbd>P</kbd> AI 代打<br><kbd>Tab</kbd> 選 Boss　點隊伍列表／角色選隊友';
 }
 
 const P3V_STORE = 'uwu-trainer-p3v';
@@ -143,6 +143,11 @@ function buildQualitySetting() {
   const cur = loadSetting(QUALITY_STORE, { q: 'normal' });
   const apply = (q) => { cur.q = q; setSeg('seg-quality', q); r3d.setQuality(q); saveSetting(QUALITY_STORE, cur); };
   seg('seg-quality', apply);
+  $('perf-copy').addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    const text = perfText();
+    navigator.clipboard.writeText(text).then(() => toast('效能資訊已複製，貼給隊友或開發者即可'), () => toast('無法存取剪貼簿：請直接截圖設定裡的效能資訊'));
+  });
   apply(cur.q);
 }
 // 音效設定
@@ -163,26 +168,36 @@ function buildAudioSettings() {
   $('b-test-sfx').addEventListener('click', (e) => { e.currentTarget.blur(); sfx.unlock(); setTimeout(() => sfx.play('markMe'), 30); });
 }
 
-// 場地標點：玩家自訂，整場共用，存在瀏覽器（沒存過就用攻略預設）
+// 場地標點：沒自訂過就用各階段的攻略預設（換階段自動切換）；自訂過就整場共用，存在瀏覽器
 const WM_KEYS = ['A', 'B', 'C', 'D', '1', '2', '3', '4'];
 const WM_STORE = 'uwu-trainer-waymarks';
-const wm = { list: [], ver: 0, tool: null };   // tool：要放的標點、'del'（移除）或 null
-const wmDefault = () => WAYMARKS.map((w) => ({ k: w.k, x: w.x, z: w.z }));
+const wm = { list: [], ver: 0, tool: null, custom: false, pid: null };   // tool：要放的標點、'del'（移除）或 null；custom：有人自訂過
+/** 攻略預設標點：A～D、1，加上這個階段攻略用到的數字標點（P2 與 P4 的 2 號位置不同）。 */
+const wmDefault = (pid) => WAYMARKS.map((w) => ({ k: w.k, x: w.x, z: w.z })).concat(Object.entries(PHASES[pid].waymarks || {}).map(([k, p]) => ({ k, x: p[0], z: p[1] })));
+/** 存過的自訂標點；沒存過回傳 null。 */
 function loadWaymarks() {
   let o = null;
   try { o = JSON.parse(localStorage.getItem(WM_STORE)); } catch (_) { /* 讀不到就用預設 */ }
-  if (!o || typeof o !== 'object') return wmDefault();
+  if (!o || typeof o !== 'object') return null;
   return WM_KEYS.filter((k) => Array.isArray(o[k]) && o[k].length === 2 && o[k].every(Number.isFinite)).map((k) => ({ k, x: o[k][0], z: o[k][1] }));
 }
-function setWaymarks(list) {
+/** 改標點並告訴全隊。custom：自訂（存起來，之後換階段不再切換）；否則回到攻略預設（清掉存檔）。 */
+function setWaymarks(list, custom) {
+  wm.custom = custom;
   applyWaymarks(list);
-  if (netOn() && N.link) N.link.send({ t: 'wm', to: 'all', list });   // 標點全隊共用
+  if (custom) { const o = {}; for (const w of list) o[w.k] = [w.x, w.z]; saveSetting(WM_STORE, o); }
+  else { try { localStorage.removeItem(WM_STORE); } catch (_) { /* 存不了也沒關係 */ } }
+  if (netOn() && N.link) N.link.send({ t: 'wm', to: 'all', list, custom });   // 標點全隊共用
 }
-function applyWaymarks(list) {
-  wm.list = list; wm.ver++;
-  const o = {};
-  for (const w of list) o[w.k] = [w.x, w.z];
-  saveSetting(WM_STORE, o);
+function applyWaymarks(list) { wm.list = list; wm.ver++; }
+/** 換階段：沒自訂過標點時切換到這個階段的攻略預設（隊員跟著房主的設定）。 */
+function syncPhaseWaymarks() {
+  const pid = curPid();
+  if (pid === wm.pid) return;
+  wm.pid = pid;
+  if (wm.custom || isGuest()) return;
+  applyWaymarks(wmDefault(pid));
+  if (isHost()) sendCfg();
 }
 function setWmTool(t) {
   wm.tool = t;
@@ -198,11 +213,11 @@ function useWmTool(p) {
   if (wm.tool === 'del') {      // 移除模式保持開著，可以連續移除
     let best = null, bd = 3;
     for (const w of wm.list) { const d = Math.hypot(w.x - q.x, w.z - q.z); if (d < bd) { bd = d; best = w; } }
-    if (best) setWaymarks(wm.list.filter((w) => w !== best));
+    if (best) setWaymarks(wm.list.filter((w) => w !== best), true);
     return;
   }
   const k = wm.tool;
-  setWaymarks(wm.list.filter((w) => w.k !== k).concat([{ k, x: Math.round(q.x * 100) / 100, z: Math.round(q.z * 100) / 100 }]));
+  setWaymarks(wm.list.filter((w) => w.k !== k).concat([{ k, x: Math.round(q.x * 100) / 100, z: Math.round(q.z * 100) / 100 }]), true);
   setWmTool(null);
 }
 function buildWaymarks() {
@@ -215,9 +230,10 @@ function buildWaymarks() {
     b.addEventListener('click', (e) => { e.currentTarget.blur(); setWmTool(wm.tool === k ? null : k); });
     row.appendChild(b);
   }
-  $('wm-reset').addEventListener('click', (e) => { e.currentTarget.blur(); setWmTool(null); setWaymarks(wmDefault()); });
-  $('wm-clear').addEventListener('click', (e) => { e.currentTarget.blur(); setWmTool(null); setWaymarks([]); });
-  wm.list = loadWaymarks(); wm.ver++;
+  $('wm-reset').addEventListener('click', (e) => { e.currentTarget.blur(); setWmTool(null); setWaymarks(wmDefault(curPid()), false); });
+  $('wm-clear').addEventListener('click', (e) => { e.currentTarget.blur(); setWmTool(null); setWaymarks([], true); });
+  const saved = loadWaymarks();
+  wm.custom = !!saved; wm.pid = curPid(); wm.list = saved || wmDefault(wm.pid); wm.ver++;
 }
 
 function syncSide() {
@@ -230,14 +246,14 @@ function syncSide() {
   $('charge').style.display = PH().maxCharges ? '' : 'none';   // P4 沒有覺醒充能
   setSeg('seg-death', deathMode());
   $('deathnote').textContent = keep
-    ? '倒地的人可以被補師／C 復活（AI 補師也會救人），真人玩家全部倒地或按「放棄」才結束；沒覺醒也打到最後（結算標 ✗）。'
+    ? '倒地的人可以被補師／D4 復活（AI 補師也會救人），真人玩家全部倒地或按「放棄」才結束；沒覺醒也打到最後（結算標 ✗）。'
     : '任何人死亡就失敗，馬上看結算重來（自殺流的計畫倒地除外）。';
   $('app').classList.toggle('can-giveup', keep && !isGuest() && (S.phase === 'running' || S.phase === 'paused'));
   const p3on = S.pid === 'p3' || fullMode();
   $('p3vsec').classList.toggle('show', p3on);
   setSeg('seg-p3v', S.p3v);
   $('p3vnote').textContent = S.p3v === 'suicide'
-    ? '自殺流：OT／M1／M2／R 在第二波大地之重倒地，H1→OT、H2→M1、C→M2（即刻）與 R（10 秒）；石牢固定 泰坦—C—H1—H2；三顆石牢形成後起身（F）。'
+    ? '自殺流：OT／D1／D2／D3 在第二波大地之重倒地，H1→OT、H2→D1、D4→D2（即刻）與 D3（10 秒）；石牢固定 泰坦—D4—H1—H2；三顆石牢形成後起身（F）。'
     : '正規：照萌神神攻略，花崗石牢隨機點 3 人，照順序站 泰坦位／1 號位／爆破岩石位。';
   $('modenote').textContent = S.mode === 'guide'
     ? '會顯示建議站位（取自攻略圖）、提前預告與下一步提示，可放慢速度。'
@@ -326,7 +342,8 @@ function netConnect(room) {
 function netLeave(silent) {
   const wasGuest = isGuest();
   if (N.link) N.link.close();
-  Object.assign(N, { role: 'off', link: null, me: null, host: null, members: [], roles: {}, room: '', cfg: null, rep: null, mirror: null, lastSim: null, spectate: false });
+  Object.assign(N, { role: 'off', link: null, me: null, host: null, members: [], roles: {}, room: '', cfg: null, rep: null, mirror: null, lastSim: null, spectate: false, hostAway: false });
+  $('hostaway').classList.remove('show');
   if (wasGuest) { S.phase = 'ready'; newRun(S.seed); }   // 回到單機：重新建立自己的模擬
   else if (S.sim) newRun(S.seed);
   if (!silent) syncNet();
@@ -341,7 +358,7 @@ function onNetMessage(m) {
   if (m.t === 'welcome') { N.me = m.id; return; }
   if (m.t === 'roomfull') { $('net-msg').textContent = '房間已滿（最多 10 人）。'; return; }
   if (m.t === 'roster') { onRoster(m); return; }
-  if (m.t === 'wm') { applyWaymarks(m.list); return; }
+  if (m.t === 'wm') { wm.custom = !!m.custom; applyWaymarks(m.list); return; }
   if (isHost()) hostMessage(m);
   else if (isGuest()) guestMessage(m);
 }
@@ -351,7 +368,7 @@ function onRoster(m) {
   if (m.host === N.me && !isHost()) becomeHost();
   else if (m.host !== N.me && !isGuest()) becomeGuest();
   else if (isHost()) hostRosterChanged();
-  if (prevHost && prevHost !== m.host) toast(`房主改為 ${memberName(m.host)}`);
+  if (prevHost && prevHost !== m.host) { toast(`房主改為 ${memberName(m.host)}`); N.hostAway = false; $('hostaway').classList.remove('show'); }
   buildParty(); syncNet(); syncSide();
 }
 
@@ -378,9 +395,11 @@ function becomeHost() {
   toast(fromGuest ? '你現在是房主：從最近的檢查點重新開始' : '房間已建立：把房號給隊友');
 }
 function becomeGuest() {
+  const fresh = N.role === 'pending';
   N.role = 'guest'; N.rep = null; N.mirror = null; N.lastSim = null;
   S.phase = 'ready'; S.dismissed = false;
   $('overlay').classList.remove('show');
+  if (fresh) N.link.send({ t: 'role', slot: S.role, join: true });   // 進房時想要的職位（自己畫面上選的）
 }
 /** 新進房的人：分配第一個沒人用的職位（8 個都有人就觀戰）。 */
 function assignNewMembers() {
@@ -441,27 +460,45 @@ function hostMessage(m) {
     if (m.a === 'skill' && S.phase === 'running' && SKILLS[m.id]) {
       const c = S.sim.chars[slot];
       if (c.remote && m.x !== undefined) c.net = { x: m.x, z: m.z, rot: m.r };   // 按技能時的位置（不算移動）
-      S.sim.useSkill(slot, m.id, m.tg);
+      S.sim.useSkill(slot, m.id, m.tg, m.bt);
     }
     if (m.a === 'auto') S.sim.setRemoteAuto(slot, !!m.on);
     return;
   }
   if (m.t === 'role') {
-    const want = m.slot, owner = slotOwner(want);
-    if (owner && owner !== m.from) { N.link.send({ t: 'deny', to: m.from, msg: `${ROLES[want].key} 已經是 ${memberName(owner)} 的職位` }); return; }
-    if (slot !== undefined) S.sim.setRemoteAuto(slot, true);
-    N.roles[m.from] = want; S.sim.humans.add(want); S.sim.setRemoteAuto(want, false);
-    sendCfg(); sendTick(); sendFull();
-    buildParty(); syncNet();
+    const err = assignRole(m.from, m.slot, !!m.join);
+    if (err) N.link.send({ t: 'deny', to: m.from, msg: err });
   }
 }
-function pickRole(slot) {
-  if (isGuest()) { if (slot !== S.role || N.spectate) N.link.send({ t: 'role', slot }); return; }
-  if (isHost()) {
-    const owner = slotOwner(slot);
-    if (owner && owner !== N.me) { toast(`${ROLES[slot].key} 已經是 ${memberName(owner)} 的職位`); return; }
-    N.roles[N.me] = slot;
+const fighting = () => S.phase === 'running' || S.phase === 'paused';
+/** 房主：把職位 want 給成員 id。有人用就跟他互換；戰鬥中不能換。
+    join：進房時帶來的想要職位（有人用就維持系統分配，不搶別人的）。回傳要告訴對方的訊息，成功為 null。 */
+function assignRole(id, want, join) {
+  const owner = slotOwner(want), cur = N.roles[id];
+  if (owner === id) return null;
+  const now = cur === undefined ? '先觀戰' : `先分配到 ${ROLES[cur].key}`;
+  if (fighting()) return join ? `戰鬥進行中：${now}，結束後可以點職位換` : '戰鬥中不能換職位（結束、放棄或重來後再換）';
+  if (owner) {
+    if (join) return `${ROLES[want].key} 已經是 ${memberName(owner)} 的職位：${now}（可以點他的職位跟他互換）`;
+    if (cur === undefined) return `${ROLES[want].key} 已經是 ${memberName(owner)} 的職位（觀戰中不能互換）`;
+    N.roles[owner] = cur;   // 互換
+    const msg = `${memberName(id)} 跟你交換職位：你現在是 ${ROLES[cur].name}`;
+    if (owner === N.me) toast(msg); else N.link.send({ t: 'deny', to: owner, msg });
   }
+  N.roles[id] = want;
+  S.role = N.roles[N.me];
+  newRun(S.seed);   // 重開這一局；下一次房主更新會把新的分配與狀態送給所有人
+  syncNet();
+  return null;
+}
+function pickRole(slot) {
+  if (isGuest()) {
+    if (slot === S.role && !N.spectate) return;
+    if (fighting()) { toast('戰鬥中不能換職位（結束、放棄或重來後再換）'); return; }
+    N.link.send({ t: 'role', slot });
+    return;
+  }
+  if (isHost()) { const err = assignRole(N.me, slot, false); if (err) toast(err); return; }
   S.role = slot; newRun(S.seed);
 }
 
@@ -472,6 +509,7 @@ function guestMessage(m) {
   else if (m.t === 'tk') { if (N.mirror && m.ep === N.ep) { N.mirror.apply(m.snap, m.ph === 'running'); S.offset = m.off; if (m.ph !== S.phase && !(S.phase === 'ended' && m.ph !== 'ready' && m.ph !== 'running')) { S.phase = m.ph; syncSide(); } } }
   else if (m.t === 'end') { if (m.ep === N.ep) guestResult(m); }
   else if (m.t === 'deny') toast(m.msg);
+  else if (m.t === 'away') { N.hostAway = !!m.on; $('hostaway').classList.toggle('show', N.hostAway); }
 }
 function applyCfg(c) {
   N.cfg = c; N.roles = c.roles;
@@ -490,7 +528,7 @@ function loadMirror(m) {
   N.spectate = mine === undefined;
   N.mirror = new NET.Mirror(m.pid, m.variant, N.spectate ? 0 : mine, m.snap);
   N.mirror.spectator = N.spectate;
-  S.sim = N.mirror; S.offset = m.off; S.ci = m.ci; S.phase = m.ph; S.dismissed = false;
+  S.sim = N.mirror; S.offset = m.off; S.ci = m.ci; S.phase = m.ph; S.dismissed = false; S.btarget = null;
   N.acc = 0; N.kb = null; N.kbSeq = 0; N.drift = 0; N.sentMe = '';
   snapMe();
   $('overlay').classList.remove('show');
@@ -581,7 +619,7 @@ function syncNet() {
   $('net-off').style.display = on ? 'none' : '';
   $('net-on').style.display = on ? '' : 'none';
   $('app').classList.toggle('net-guest', isGuest());
-  if (!on) return;
+  if (!on) { syncRoleButtons(); return; }
   $('net-code').textContent = N.room;
   $('net-members').innerHTML = N.members.map((m) => {
     const slot = N.roles[m.id];
@@ -591,8 +629,18 @@ function syncNet() {
     return `<div class="nm-row">${role}<span class="nn">${escapeHtml(m.name)}</span>${tags}${xfer}</div>`;
   }).join('');
   $('net-note').textContent = N.role === 'pending' ? '連線中…'
-    : isHost() ? '你是房主：開始、暫停、階段、起始點、打法由你控制。點上方職位可以換自己的職位（會重開這一局）。'
-      : '房主控制開始與設定。點上方職位可以換成沒人用的職位；教學／實戰、視角、單人顯示只影響你自己的畫面。';
+    : isHost() ? '你是房主：開始、暫停、階段、起始點、打法由你控制。點上方職位可以換職位，有人用就跟他互換（會重開這一局；戰鬥中不能換）。'
+      : '房主控制開始與設定。點上方職位可以換職位，有人用就跟他互換（戰鬥中不能換）；教學／實戰、視角、單人顯示只影響你自己的畫面。';
+  syncRoleButtons();
+}
+/** 職位按鈕：連線時標出誰在用（點別人的職位＝跟他互換）。 */
+function syncRoleButtons() {
+  document.querySelectorAll('.role').forEach((b) => {
+    const slot = +b.dataset.slot, owner = netOn() ? slotOwner(slot) : undefined, other = owner !== undefined && owner !== N.me;
+    b.classList.toggle('taken', other);
+    b.querySelector('small').textContent = owner === undefined ? '' : owner === N.me ? '你' : memberName(owner);
+    b.title = ROLES[slot].name + (other ? `：${memberName(owner)}（點擊跟他互換職位）` : '');
+  });
 }
 
 // ------------------------------------------------------------------ run control
@@ -607,6 +655,7 @@ function newRun(seed) {
   S.ci = cp.ci; S.chainLog = []; S.offset = 0;
   for (let i = 0; i < cp.ci; i++) S.offset += PHASES[chain()[i]].end;
   S.sim = makeSim(curPid());
+  S.btarget = null;
   if (cp.t > 0) S.sim.fastForward(cp.t);
   S.phase = 'ready'; S.acc = 0; S.dismissed = false;
   buildParty();
@@ -687,20 +736,20 @@ function trySkill(id, fresh) {
   if (!sim || S.phase !== 'running') { if (fresh) toast(S.phase === 'paused' ? '暫停中' : '還沒開始'); return; }
   if (isGuest()) {
     if (N.spectate) return;
-    const chk = skillCheck(sim, sim.playerSlot, id, S.target);
+    const chk = skillCheck(sim, sim.playerSlot, id, S.target, S.btarget);
     if (chk.why === undefined || (chk.gcdWait !== undefined && chk.gcdWait <= 0.15)) {
       const now = performance.now();
       if (now - (hot.sendT[id] || 0) < 200) return;   // 按住時不要一直送
       hot.sendT[id] = now;
       // 連同目前位置一起送：剛停下來就讀條時，房主不會把「最後一次位置更新」誤判成讀條中移動
       const me = sim.pc, x = Math.round(me.pos.x * 100) / 100, z = Math.round(me.pos.z * 100) / 100, r = Math.round(me.rot * 1000) / 1000;
-      N.link.send({ t: 'act', a: 'skill', id, tg: S.target, x, z, r });
+      N.link.send({ t: 'act', a: 'skill', id, tg: S.target, bt: S.btarget, x, z, r });
       N.sentMe = x + ',' + z + ',' + r;
       if (chk.why === undefined) skillFlash(id);
     } else if (fresh && chk.why) toast(chk.why);
     return;
   }
-  const r = sim.useSkill(sim.playerSlot, id, S.target);
+  const r = sim.useSkill(sim.playerSlot, id, S.target, S.btarget);
   if (r.why === undefined) { if (!r.queued) skillFlash(id); } else if (fresh && r.why) toast(r.why);
 }
 function skillFlash(id) {
@@ -708,8 +757,44 @@ function skillFlash(id) {
   if (s) { s.el.classList.remove('fl'); void s.el.offsetWidth; s.el.classList.add('fl'); }
   sfx.play('skill');
 }
+/** Boss 目標（actor id；null＝取消）：攻擊打它，腳下出現紅色目標圈。 */
+function setBossTarget(id) {
+  if (id === S.btarget) return;
+  S.btarget = id;
+  if (id !== null) sfx.play('target');
+}
+/** Tab：依距離輪流選可以選中的 Boss（Shift+Tab 反向）。 */
+function cycleBoss(dir) {
+  const sim = S.sim;
+  if (!sim) return;
+  const list = bossList(sim).sort((a, b) => Math.hypot(a.pos.x - sim.pc.pos.x, a.pos.z - sim.pc.pos.z) - Math.hypot(b.pos.x - sim.pc.pos.x, b.pos.z - sim.pc.pos.z));
+  if (!list.length) { toast('沒有可以選中的目標'); return; }
+  const i = list.findIndex((a) => a.id === S.btarget);
+  setBossTarget(list[i < 0 ? 0 : (i + dir + list.length) % list.length].id);
+}
+/** 點擊畫面選目標：Boss → Boss 目標；隊友 → 隊友目標（自己不算）。 */
+function pickAt(clientX, clientY, canvasId) {
+  const sim = S.sim;
+  if (!sim) return;
+  let hit = null;
+  if (canvasId === 'c3d') hit = r3d.pick(clientX, clientY, sim);
+  else {
+    const p = r2d.screenToWorld(clientX, clientY), scale = r2d.view.scale;
+    let bd = 1e9;
+    for (const a of bossList(sim)) { const d = Math.hypot(a.pos.x - p.x, a.pos.z - p.z); if (d <= hitboxR(sim, a) + 0.6 && d < bd) { bd = d; hit = { actor: a }; } }
+    for (const c of sim.chars) {
+      if (S.party === 'solo' && c.slot !== sim.playerSlot) continue;
+      const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
+      if (d <= Math.max(1.1, 12 / scale) && d < bd) { bd = d; hit = { slot: c.slot }; }
+    }
+  }
+  if (!hit) return;
+  if (hit.actor) { if (bossList(sim).includes(hit.actor)) setBossTarget(hit.actor.id); return; }
+  if (hit.slot !== sim.playerSlot && S.target !== hit.slot) setTarget(hit.slot);
+}
 function setTarget(slot) {
   S.target = S.target === slot ? null : slot;
+  if (S.target !== null) sfx.play('target');
   partyRows.forEach((row, i) => { if (row) row.el.classList.toggle('tg', i === S.target); });
 }
 function toggleDemo() {
@@ -827,21 +912,41 @@ function myStatusHtml(list, t) {
 /** 隊伍列表裡倒地者的狀態：陣亡／誰正在救／已收到復活。 */
 function deadHtml(sim, c) {
   if (c.raise) return `<span class="rz">已收到復活（${ROLES[c.raise.by].key}）</span>`;
-  const r = sim.chars.find((x) => x.cast && x.cast.id === 'raise' && x.cast.tg === c.slot);
-  if (r) return `<span class="rz">${r.key} 復活中…</span>`;
+  const r = raiserOf(sim, c);
+  if (r) return `<span class="rz">${r.key} 復活中 ${raisePct(sim, r)}%</span>`;
   return `<span class="dead-x">${c.planned ? '倒地' : '陣亡'}</span>`;
+}
+const raiserOf = (sim, c) => sim.chars.find((x) => x.cast && x.cast.id === 'raise' && x.cast.tg === c.slot);
+const raisePct = (sim, r) => Math.round(Math.min(1, (sim.t - r.cast.t0) / (r.cast.t1 - r.cast.t0)) * 100);
+/** 技能列上方的目標列：隊友目標（倒地、誰在救、進度）與 Boss 目標。 */
+function targetLine(sim) {
+  const out = [];
+  if (S.target !== null) {
+    const c = sim.chars[S.target];
+    let st = '';
+    if (!c.alive) { const r = raiserOf(sim, c); st = c.raise ? '（倒地・已收到復活）' : r ? `（倒地・${r.key} 復活中 ${raisePct(sim, r)}%）` : '（倒地）'; }
+    out.push(`目標 <b>${c.key}</b>${st}`);
+  }
+  const b = S.btarget === null ? null : bossList(sim).find((a) => a.id === S.btarget);
+  if (b) out.push(`Boss <b class="boss">${escapeHtml(b.name)}</b>`);
+  return out.join('　');
 }
 /** 技能列：冷卻、GCD、不能用（倒地、距離太遠、沒有目標）、排隊中；自己的讀條；極限技量表。 */
 function updateHotbar(sim) {
   const pc = sim.pc, t = sim.t, run = S.phase === 'running' && t >= 0;
-  const b = bossOf(sim, pc.pos), far = !b || Math.hypot(b.pos.x - pc.pos.x, b.pos.z - pc.pos.z) > meleeReach(sim);
+  const b = bossOf(sim, pc.pos, S.btarget), far = !b || Math.hypot(b.pos.x - pc.pos.x, b.pos.z - pc.pos.z) > meleeReach(sim);
   const blocked = !pc.alive || t < pc.stunUntil;
+  const tl = targetLine(sim);
+  if (tl !== hot.tl) { $('tgline').innerHTML = tl; $('tgline').classList.toggle('show', !!tl); hot.tl = tl; }
   for (const sl of hot.slots) {
     const sk = SKILLS[sl.id];
     let p = 0, txt = '';
     if (sk.gcd) { const rem = pc.gcdUntil - t; if (rem > 0 && run) p = Math.min(1, rem / GCD); }
     else if (!sk.lb && pc.cd[sl.id] !== undefined) { const rem = pc.cd[sl.id] - t; if (rem > 0) { p = rem / sk.cd; txt = String(Math.ceil(rem)); } }
     const off = !!(!run || blocked || (sk.lb && sim.lb < 1) || (sk.melee && far) || (sk.gcd && !sk.raise && !b) || (sk.raise && !raiseTarget(sim, pc, S.target)));
+    // 選中的倒地隊友救得到：復活鍵亮綠框（按下去就是救他）
+    const aim = !!(sk.raise && S.target !== null && !off && raiseTarget(sim, pc, S.target) === sim.chars[S.target]);
+    if (aim !== sl.aim) { sl.el.classList.toggle('aim', aim); sl.aim = aim; }
     const q = !!(pc.queued && pc.queued.id === sl.id);
     const due = !!(sk.lb && run && sim.phase.lbDue && sim.phase.lbDue(sim, pc.slot));   // 輪到你用極限技（P4 拉哈布雷亞）
     const key = `${p.toFixed(2)}|${txt}|${off}|${q}|${due}`;
@@ -909,7 +1014,7 @@ function updateHud() {
   // 接受復活按鈕（自殺流的計畫倒地另外提示起身時機）
   const canRaise = S.phase === 'running' && !pc.alive && !!pc.raise;
   const rh = !canRaise ? '' : !pc.planned ? `${ROLES[pc.raise.by].key} 復活了你：起身後 5 秒無敵`
-    : pc.slot === 6 && sim.t > 60 ? '收到 C 的復活：馬上起身' : sim.t < 50.2 ? '先別起身：等三顆石牢形成（0:50 之後）' : sim.t <= 55.5 ? '現在可以起身（三牢已形成，踩地板前）' : '踩地板開始了，盡快起身';
+    : pc.slot === 6 && sim.t > 60 ? '收到 D4 的復活：馬上起身' : sim.t < 50.2 ? '先別起身：等三顆石牢形成（0:50 之後）' : sim.t <= 55.5 ? '現在可以起身（三牢已形成，踩地板前）' : '踩地板開始了，盡快起身';
   if (canRaise !== hud.raise) { $('raise').classList.toggle('show', canRaise); hud.raise = canRaise; }
   if (rh !== hud.raiseHint) { $('raise-hint').textContent = S.mode === 'guide' || !pc.planned ? rh : ''; hud.raiseHint = rh; }
   updateHotbar(sim);
@@ -951,12 +1056,12 @@ function updateHud() {
     if (!pc.alive && !pc.planned) {   // 繼續打：倒地等復活
       $('g-title').textContent = sim.keepGoing ? '倒地：等待復活' : '陣亡';
       $('g-tip').textContent = !sim.keepGoing ? '' : pc.raise ? `${ROLES[pc.raise.by].key} 已經復活你：按 F（或畫面上的按鈕）起身，起身後 5 秒無敵，先回到自己的位置。`
-        : '等補師／C 復活你（AI 補師會自動救人）。可以看看隊友的處理。';
+        : '等補師／D4 復活你（AI 補師會自動救人）。可以看看隊友的處理。';
     } else if (!pc.alive && pc.planned) {   // 自殺流倒地中
       $('g-title').textContent = '倒地（照自殺流）：等待復活';
       $('g-tip').textContent = pc.raise
         ? `${ROLES[pc.raise.by].key} 已經復活你。${pc.slot === 6 ? '收到就按 F 起身，回到人群。' : '三顆石牢形成後（0:50）～開始踩地板前（0:55）按 F 起身，起身後先普通移動到泰坦旁集合。'}`
-        : '照分配等隊友復活（H1→OT、H2→M1、C→M2、C 10 秒詠唱→R）；收到後先別起身。';
+        : '照分配等隊友復活（H1→OT、H2→D1、D4→D2、D4 10 秒詠唱→D3）；收到後先別起身。';
     } else {
       $('g-title').textContent = cur ? `${cur.title}${cur.frame ? '（攻略 ' + cur.frame + '）' : ''}` : '準備';
       $('g-tip').textContent = cur ? (cur.tip || '') : '按 Space 開始。黃色虛線圈是建議站位；1～7 使用技能。';
@@ -981,7 +1086,7 @@ function updateHud() {
     bh = `<div class="mid">${ROLES[S.role].name}</div><div class="sm">${where}</div><button class="btn primary bn-start" data-act="start">開始${sim.t < 0 ? '（' + (-sim.t) + ' 秒倒數）' : ''}</button><div class="sm">或按 Space</div>`;
   } else if (S.phase === 'paused') bh = '<div class="mid">已暫停</div><div class="sm">按 Space 繼續</div>';
   else if (S.phase === 'running' && sim.t < 0) bh = `<div class="big">${Math.ceil(-sim.t)}</div>`;
-  else if (S.phase === 'ended' && S.dismissed) bh = `<div class="mid">${sim.status === 'cleared' ? '成功' : '失敗'}</div><div class="sm">按 R 重來・N 換隨機</div>`;
+  else if (S.phase === 'ended' && S.dismissed) bh = `<div class="mid">${sim.status === 'cleared' ? '成功' : '失敗'}</div><div class="sm">按 D3 重來・N 換隨機</div>`;
   if (bh !== lastBanner) { $('banner').innerHTML = bh; lastBanner = bh; }
 }
 
@@ -1061,7 +1166,24 @@ function meterFps(now, rawDt) {
   const fps = fpsMeter.n * 1000 / (now - fpsMeter.t0);
   const text = `FPS ${Math.round(fps)}` + (fpsMeter.worst > 40 ? `・最慢 ${Math.round(fpsMeter.worst)}ms` : '');
   if (text !== fpsMeter.text) { $('fps').textContent = text; fpsMeter.text = text; $('fps').classList.toggle('bad', fps < 45 || fpsMeter.worst > 40); }
+  fpsMeter.fps = fps; fpsMeter.last = fpsMeter.worst;
   fpsMeter.t0 = now; fpsMeter.n = 0; fpsMeter.worst = 0;
+  updatePerfInfo();
+}
+/** 設定裡的效能資訊（每 0.5 秒）：給隊友回報卡頓時用。 */
+function perfText() {
+  const lines = [`FPS ${Math.round(fpsMeter.fps || 0)}（最慢一幀 ${Math.round(fpsMeter.last || 0)}ms）・視角 ${S.view}`];
+  if (r3d && S.view !== '2d') {
+    const p = r3d.perfInfo();
+    lines.push(`3D 繪圖呼叫 ${p.calls}・三角形 ${p.tris}`, `畫面 ${p.w}×${p.h}（像素比 ${p.pr}，畫質 ${p.quality}）`, `顯示卡：${p.gpu}`);
+  }
+  lines.push(`瀏覽器：${navigator.userAgent.replace(/^Mozilla\/5\.0 /, '')}`);
+  return lines.join('\n');
+}
+function updatePerfInfo() {
+  const el = $('perfinfo');
+  if (!el.offsetParent) return;   // 設定收起來時不更新
+  el.textContent = perfText();
 }
 
 /** 一幀：推進模擬（固定步長）＋繪製。now 為 requestAnimationFrame 的時間戳。 */
@@ -1084,10 +1206,11 @@ function tick(now) {
     audioTick();
     if (S.sim.status !== 'running') { S.phase = 'ended'; syncSide(); showResult(); }
   }
+  syncPhaseWaymarks();
   if (isHost()) netHostTick(now);
   const sim = S.sim;
   const alpha = isGuest() ? Math.min(1, N.acc / STEP) : S.phase === 'running' && sim.status === 'running' ? Math.min(1, S.acc / STEP) : 1;
-  const o = { assist: S.mode === 'guide', solo: S.party === 'solo', mini: S.view === 'both', pid: curPid(), now, alpha, wm };
+  const o = { assist: S.mode === 'guide', solo: S.party === 'solo', mini: S.view === 'both', pid: curPid(), now, alpha, wm, btarget: S.btarget, atarget: S.target };
   if (S.view !== '3d' && r2d) r2d.draw(sim, o);
   if (S.view !== '2d' && r3d) r3d.render(sim, o);
   updateHud();
@@ -1102,6 +1225,8 @@ window.addEventListener('keydown', (e) => {
   sfx.unlock();
   const k = e.key.toLowerCase();
   if (k === 'escape' && wm.tool) { setWmTool(null); return; }
+  if (k === 'tab') { e.preventDefault(); if (!e.repeat) cycleBoss(e.shiftKey ? -1 : 1); return; }
+  if (k === 'escape') { if (S.btarget !== null) setBossTarget(null); else if (S.target !== null) setTarget(S.target); return; }
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { S.keys.add(k); e.preventDefault(); return; }
   if (k === ' ') { e.preventDefault(); if (!e.repeat) startPause(); }
   else if (k === 'r') { if (hostOk()) newRun(S.seed); }
@@ -1124,6 +1249,8 @@ window.addEventListener('keyup', (e) => {
   if (/^[1-9]$/.test(k)) S.held = null;
 });
 window.addEventListener('blur', () => { S.keys.clear(); S.held = null; });
+// 房主切到背景：瀏覽器會暫停畫面更新（房間跟著停住），告訴隊員是房主切走了、不是連線問題
+document.addEventListener('visibilitychange', () => { if (isHost() && N.link) N.link.send({ t: 'away', to: 'all', on: document.hidden }); });
 window.addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
 
 // 放標點：點 2D 地圖／小地圖／3D 地面（攔在轉鏡頭之前）
@@ -1139,8 +1266,8 @@ stage.addEventListener('pointerdown', (e) => {
 
 let drag = null;
 stage.addEventListener('pointerdown', (e) => {
-  if (S.view === '2d' || e.target.closest('#overlay, button')) return;
-  if (S.view === 'both' && e.target.id === 'c2d') return;
+  // 只有在 3D 畫面本身按下才轉鏡頭：按在隊伍列表、技能列等介面上不能搶走（pointer capture 會讓 click 送不到介面）
+  if (S.view === '2d' || e.target.id !== 'c3d') return;
   drag = { x: e.clientX, y: e.clientY };
   stage.classList.add('dragging');
   try { stage.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
@@ -1152,6 +1279,17 @@ stage.addEventListener('pointermove', (e) => {
 });
 const endDrag = () => { drag = null; stage.classList.remove('dragging'); };
 stage.addEventListener('pointerup', endDrag);
+// 點擊（按下到放開幾乎沒移動）＝選目標；拖曳是轉鏡頭
+let tap = null;
+stage.addEventListener('pointerdown', (e) => {
+  const id = e.target.id;
+  tap = e.button === 0 && !wm.tool && (id === 'c3d' || id === 'c2d') ? { x: e.clientX, y: e.clientY, t: performance.now(), id } : null;
+});
+stage.addEventListener('pointerup', (e) => {
+  const tp = tap; tap = null;
+  if (!tp || Math.hypot(e.clientX - tp.x, e.clientY - tp.y) > 6 || performance.now() - tp.t > 450) return;
+  pickAt(e.clientX, e.clientY, tp.id === 'c3d' && r3d ? 'c3d' : 'c2d');
+});
 stage.addEventListener('pointercancel', endDrag);
 stage.addEventListener('contextmenu', (e) => e.preventDefault());
 stage.addEventListener('wheel', (e) => {

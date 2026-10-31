@@ -90,6 +90,42 @@ function marker(type) {
   });
 }
 
+/** 目標圈（512×512，圓環半徑 200）：enemy＝紅色、背後缺口、兩側標記、前方箭頭（前方＝畫布下方）；ally＝綠色完整圓環。 */
+const RING_R = 200;
+function targetRing(kind) {
+  return make('tring-' + kind, 512, 512, (ctx) => {
+    const cx = 256, cy = 256, R = RING_R, enemy = kind === 'enemy';
+    const glow = enemy ? 'rgba(255,40,30,' : 'rgba(60,255,140,', line = enemy ? '#fff2ee' : '#effff4';
+    const gap = enemy ? 0.62 : 0;   // 背後缺口（半角，弧度）
+    const a0 = -PI / 2 + gap, a1 = PI * 1.5 - gap;
+    const arc = (r, w, style, blur) => {
+      ctx.save(); ctx.lineWidth = w; ctx.strokeStyle = style; ctx.lineCap = 'round';
+      if (blur) { ctx.shadowColor = glow + '1)'; ctx.shadowBlur = blur; }
+      ctx.beginPath(); if (gap) ctx.arc(cx, cy, r, a0, a1); else ctx.arc(cx, cy, r, 0, PI * 2); ctx.stroke(); ctx.restore();
+    };
+    arc(R - 9, 34, glow + '0.55)', 28);   // 外層紅光
+    arc(R + 6, 5, line, 10);
+    arc(R - 22, 4, line, 8);
+    if (!enemy) return;
+    // 兩側標記（左右各一個 V 形）
+    for (const sx of [-1, 1]) {
+      ctx.save(); ctx.translate(cx + sx * (R - 8), cy); ctx.rotate(sx * -PI / 2);
+      ctx.shadowColor = glow + '1)'; ctx.shadowBlur = 12;
+      ctx.strokeStyle = line; ctx.lineWidth = 6; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(-17, -9); ctx.lineTo(0, 9); ctx.lineTo(17, -9); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-10, -20); ctx.lineTo(0, -10); ctx.lineTo(10, -20); ctx.stroke();
+      ctx.restore();
+    }
+    // 前方箭頭（畫布下方）
+    ctx.save(); ctx.translate(cx, cy + R + 4);
+    ctx.shadowColor = glow + '1)'; ctx.shadowBlur = 16;
+    ctx.fillStyle = line; ctx.strokeStyle = '#c21a10'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(0, 44); ctx.quadraticCurveTo(-24, 6, -20, -22); ctx.lineTo(20, -22); ctx.quadraticCurveTo(24, 6, 0, 44); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c21a10'; ctx.beginPath(); ctx.ellipse(0, -2, 5, 14, 0, 0, PI * 2); ctx.fill();
+    ctx.restore();
+  });
+}
+
 /** 分攤地面箭頭環（256×256，箭頭指向中心）。 */
 function stackRing() {
   return make('stackRing', 256, 256, (ctx) => {
@@ -194,5 +230,5 @@ function waymark(letter, color) {
   });
 }
 
-root.UWU_ICONS = { marker, stackRing, chevrons, softDot, feather, swirl, aoeRadial, aoeLinear, flame, waymark };
+root.UWU_ICONS = { marker, stackRing, chevrons, softDot, feather, swirl, aoeRadial, aoeLinear, flame, waymark, targetRing, RING_R };
 })(window);

@@ -1,7 +1,8 @@
 /* 2D 俯視圖渲染（北在上）：場地主題、FF14 風格預警圈（讀條時填滿）、判定粒子、頭頂點名標記、震動。 */
 (function (root) {
 'use strict';
-const { C, ROLES, WM_COLOR, ipos, irot } = root.UWU;
+const U = root.UWU;
+const { C, ROLES, WM_COLOR, ipos, irot } = U;
 const IC = root.UWU_ICONS;
 const PI = Math.PI;
 
@@ -249,6 +250,12 @@ class Renderer2D {
       }
     }
 
+    // 目標圈（畫在 Boss／隊員底下）
+    const bt = o.btarget === null ? null : U.bossList(sim).find((a) => a.id === o.btarget);
+    if (bt) { const p = this.ip(bt); this.drawRing(ctx, 'enemy', X(p.x), Z(p.z), irot(bt, this.alpha), U.hitboxR(sim, bt) * scale); }
+    const ac = o.atarget === null ? null : sim.chars[o.atarget];
+    if (ac && (!o.solo || ac.slot === sim.playerSlot)) { const p = this.ip(ac); this.drawRing(ctx, 'ally', X(p.x), Z(p.z), 0, Math.max(10, 0.62 * scale) + 7 + Math.sin(tsec * 5) * 1.5); }
+
     // 敵人與場上實體
     for (const a of sim.actors) {
       if (a.dead || !a.visible) continue;
@@ -358,6 +365,11 @@ class Renderer2D {
     ctx.restore();
   }
 
+  /** 目標圈貼圖：前方（貼圖下方）轉到面向 rot，圓環半徑 rpx 像素。 */
+  drawRing(ctx, kind, x, z, rot, rpx) {
+    const s = 512 * rpx / IC.RING_R;
+    ctx.save(); ctx.translate(x, z); ctx.rotate(-rot); ctx.drawImage(IC.targetRing(kind), -s / 2, -s / 2, s, s); ctx.restore();
+  }
   drawActor(ctx, a, X, Z, scale, tsec, mini) {
     const ap = this.ip(a);
     const ar = irot(a, this.alpha);

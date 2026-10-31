@@ -1,15 +1,15 @@
 /* P2 伊弗利特（覺醒前＋覺醒後）。站位／分工：攻略 P2A-F01~F13、P2B-F01~F24；時間點參考第三方 log 資料（毫秒級），
-   與攻略 mm:ss 相差 1~3 秒。職位對應：戰=MT 騎=OT 白=H1 學=H2 龍=M1 忍=M2 詩=R 召=C。
+   與攻略 mm:ss 相差 1~3 秒。職位對應：戰=MT 騎=OT 白=H1 學=H2 龍=D1 忍=D2 詩=D3 召=D4。
    隨機：伊弗利特開場方位、光輝炎柱的邊緣圓位置、火獄之楔的方向（8 種旋轉：楔 1 在正點或斜點）、灼熱咆哮補師、烈焰碎擊目標、
    分身深紅旋風出現的兩個正點、覺醒深紅旋風各自出現在楔子方向或對面、覺醒本體。 */
 (function (root) {
 'use strict';
 const U = root.UWU;
 const { PHASES, ROLES, isTank, inCircle, inRect, inCone, atBearing, mulberry32, shuffler, dist, rotateXZ } = U;
-const { MT, OT, H1, H2, M1, M2, RR, CC } = U;
+const { MT, OT, H1, H2, D1, D2, D3, D4 } = U;
 const PI = Math.PI;
 const FR = U.FRAMES;
-const IDX = { MT: 0, OT: 1, H1: 2, H2: 3, M1: 4, M2: 5, R: 6, C: 7 };
+const IDX = { MT: 0, OT: 1, H1: 2, H2: 3, D1: 4, D2: 5, D3: 6, D4: 7 };
 
 const K = {
   EDGE_R: 19.5, LANE_HALF: 9, LANE_LEN: 44, CROSS_HALF: 5, PLUME_R: 8, ERUPT_R: 8, WIND_R: 14, CRUSH_R: 4, CRUSH_NEED: 6,
@@ -33,7 +33,7 @@ const norm360 = U.norm360;
 
 function roll(seed) {
   const rng = mulberry32(seed), sh = shuffler(rng), pick = (a) => a[Math.floor(rng() * a.length)];
-  const dps = [M1, M2, RR, CC];
+  const dps = [D1, D2, D3, D4];
   const howl1 = pick([H1, H2]);
   // 火獄之楔：固定的等腰梯形（2 正點＋2 斜點），整組隨機旋轉 45° 的倍數 → 楔 1 可能在正點或斜點（攻略的兩種情況）
   const b = 45 * Math.floor(rng() * 8);
@@ -123,7 +123,7 @@ function build(S) {
     const cur = () => who;
     at(tCast, () => { S.cast('伊弗利特', 'Inferno Howl（灼熱咆哮）', tCast, 1.7); });
     at(tOn, () => {
-      who = S.pickAlive(slotFn(), [H1, H2, M1, M2, RR, CC]);   // 預定的補師倒地 → 點下一個活著的人
+      who = S.pickAlive(slotFn(), [H1, H2, D1, D2, D3, D4]);   // 預定的補師倒地 → 點下一個活著的人
       const h = S.chars[who]; h.searing = true; S.addStatus(h.slot, 'searing', dur); S.log(`${h.key} 被點名灼熱咆哮：遠離人群`, h.slot);
     });
     at(tOn + dur, () => { S.chars[who].searing = false; });
@@ -165,7 +165,7 @@ function build(S) {
   const crush = (slot0, tMark, tRes) => {
     let stack = [], slot = slot0;
     at(tMark, () => {
-      slot = S.pickAlive(slot0, [M1, M2, RR, CC, H1, H2]);
+      slot = S.pickAlive(slot0, [D1, D2, D3, D4, H1, H2]);
       S.mark(slot, 'crush', tMark, tRes);
       const fx = S.addFx({ kind: 'circle', r: K.CRUSH_R, t0: tMark, t1: tRes, label: 'Flaming Crush（烈焰碎擊）', tint: 'share', assistFrom: tMark });
       fx.follow = (f) => { const c = S.chars[slot]; f.x = c.pos.x; f.z = c.pos.z; };
@@ -341,10 +341,10 @@ function build(S) {
   }, {
     MT: '站火楔 3 旁（約離伊弗利特 3）：負責火楔 3，並牽制。',
     OT: '把伊弗利特拉向火楔 3、4 的方向；負責火楔 4。',
-    M1: '站在火楔 1 與伊弗利特之間：先打火楔 1 到殘血，轉打伊弗利特，等火楔出現 2 層 Buff 再擊殺。',
-    M2: '站在火楔 2 與伊弗利特之間：同樣處理火楔 2。',
-    R: '站在火楔 1 方向的場地邊緣：之後地火噴發的圓要蓋到火楔 1，再蓋火楔 3。',
-    C: '站在火楔 2 方向的場地邊緣：之後地火噴發的圓要蓋到火楔 2，再蓋火楔 4。',
+    D1: '站在火楔 1 與伊弗利特之間：先打火楔 1 到殘血，轉打伊弗利特，等火楔出現 2 層 Buff 再擊殺。',
+    D2: '站在火楔 2 與伊弗利特之間：同樣處理火楔 2。',
+    D3: '站在火楔 1 方向的場地邊緣：之後地火噴發的圓要蓋到火楔 1，再蓋火楔 3。',
+    D4: '站在火楔 2 方向的場地邊緣：之後地火噴發的圓要蓋到火楔 2，再蓋火楔 4。',
     H: '站在中心待命（會被灼熱咆哮點名的補師稍後去 2 號位邊緣）。',
   }, 'P2A-F06');
   MV(48.0, 'hw1', '灼熱咆哮①：被點名補師去 2 號位', (S2) => { const a = Array(8).fill(null); const p = rf(S2, 'P2A-F06')[S2.roll.howl1]; a[S2.roll.howl1] = p; return a; }, {
@@ -352,48 +352,48 @@ function build(S) {
     def: '留在原位。被點名的補師會去邊緣。',
   }, 'P2A-F06', { preview: false });
   MV(50.8, 'er1', '地火噴發 ①', (S2) => rf(S2, 'P2A-F07'), {
-    R: '地火噴發第 1 圈會落在你腳下：站火楔 1 方向邊緣，讓圓蓋住火楔 1。',
-    C: '地火噴發第 1 圈會落在你腳下：站火楔 2 方向邊緣，讓圓蓋住火楔 2。',
-    def: '離邊緣遠一點（R/C 是離伊弗利特最遠的 2 人，會被點名放圈）。',
+    D3: '地火噴發第 1 圈會落在你腳下：站火楔 1 方向邊緣，讓圓蓋住火楔 1。',
+    D4: '地火噴發第 1 圈會落在你腳下：站火楔 2 方向邊緣，讓圓蓋住火楔 2。',
+    def: '離邊緣遠一點（D3/D4 是離伊弗利特最遠的 2 人，會被點名放圈）。',
   }, 'P2A-F07');
-  MV(51.3, 'er2', '地火噴發 ②：R/C 沿邊緣移動', (S2) => { const a = rf(S2, 'P2A-F08'); return only([[M1, a[M1]], [M2, a[M2]], [RR, a[RR]], [CC, a[CC]]]); }, {
-    R: '放完第 1 圈立刻沿邊緣往火楔 3 的方向移動約 10：第 2 圈再蓋火楔 1。', C: '放完第 1 圈立刻沿邊緣往火楔 4 的方向移動約 10：第 2 圈再蓋火楔 2。',
-    M1: '離開圓（半徑 8），繼續打火楔 1。', M2: '離開圓，繼續打火楔 2。', def: '留在中心。',
+  MV(51.3, 'er2', '地火噴發 ②：D3/D4 沿邊緣移動', (S2) => { const a = rf(S2, 'P2A-F08'); return only([[D1, a[D1]], [D2, a[D2]], [D3, a[D3]], [D4, a[D4]]]); }, {
+    D3: '放完第 1 圈立刻沿邊緣往火楔 3 的方向移動約 10：第 2 圈再蓋火楔 1。', D4: '放完第 1 圈立刻沿邊緣往火楔 4 的方向移動約 10：第 2 圈再蓋火楔 2。',
+    D1: '離開圓（半徑 8），繼續打火楔 1。', D2: '離開圓，繼續打火楔 2。', def: '留在中心。',
   }, 'P2A-F08');
-  MV(53.3, 'er3', '地火噴發 ③：R/C 移到火楔 3、4', (S2) => { const a = rf(S2, 'P2A-F09'); return only([[RR, a[RR]], [CC, a[CC]]]); }, {
-    R: '繼續往火楔 3 方向移動：第 3 圈蓋火楔 3。', C: '繼續往火楔 4 方向移動：第 3 圈蓋火楔 4。', def: '留在原位。',
+  MV(53.3, 'er3', '地火噴發 ③：D3/D4 移到火楔 3、4', (S2) => { const a = rf(S2, 'P2A-F09'); return only([[D3, a[D3]], [D4, a[D4]]]); }, {
+    D3: '繼續往火楔 3 方向移動：第 3 圈蓋火楔 3。', D4: '繼續往火楔 4 方向移動：第 3 圈蓋火楔 4。', def: '留在原位。',
   }, 'P2A-F09');
-  MV(54.6, 'er3b', '人群回 1 號位', (S2) => { const a = rf(S2, 'P2A-F09'); a[RR] = null; a[CC] = null; a[S2.roll.howl1] = null; return a; }, {
-    def: '人群移到 1 號位，避免被地火噴發打到。', M1: '回到 1 號位附近，繼續打火楔。', M2: '回到 1 號位附近，繼續打火楔。',
+  MV(54.6, 'er3b', '人群回 1 號位', (S2) => { const a = rf(S2, 'P2A-F09'); a[D3] = null; a[D4] = null; a[S2.roll.howl1] = null; return a; }, {
+    def: '人群移到 1 號位，避免被地火噴發打到。', D1: '回到 1 號位附近，繼續打火楔。', D2: '回到 1 號位附近，繼續打火楔。',
   }, 'P2A-F09');
-  MV(55.3, 'er4', '地火噴發 ④', (S2) => { const a = rf(S2, 'P2A-F10'); return only([[RR, a[RR]], [CC, a[CC]]]); }, {
-    R: '再小移一點：第 4 圈再蓋火楔 3。', C: '再小移一點：第 4 圈再蓋火楔 4。', def: '留在原位。',
+  MV(55.3, 'er4', '地火噴發 ④', (S2) => { const a = rf(S2, 'P2A-F10'); return only([[D3, a[D3]], [D4, a[D4]]]); }, {
+    D3: '再小移一點：第 4 圈再蓋火楔 3。', D4: '再小移一點：第 4 圈再蓋火楔 4。', def: '留在原位。',
   }, 'P2A-F10');
   MV(57.5, 'er5', '回人群', (S2) => { const a = rf(S2, 'P2A-F11'); a[S2.roll.howl1] = null; return a; }, {
-    R: '放完最後一圈後回到人群。', C: '放完最後一圈後回到人群。', def: '擊殺火楔 1、2（被命中 2 次以上才算覺醒層數）。',
+    D3: '放完最後一圈後回到人群。', D4: '放完最後一圈後回到人群。', def: '擊殺火楔 1、2（被命中 2 次以上才算覺醒層數）。',
   }, 'P2A-F11');
   MV(59.5, 'er6', '集合擊殺火楔', (S2) => { const a = rf(S2, 'P2A-F12'); a[S2.roll.howl1] = null; return a; }, { def: '在 1 號位附近，DPS 依序擊殺火楔 3、4。' }, 'P2A-F12');
   MV(71.5, 'tank2', '覺醒前結束：回 1 號位', () => fp('P2A-F05'), { def: '伊弗利特消失後回 1 號位；OT 準備再拉。' }, 'P2A-F13');
   MV(79.5, 'corner', 'OT 把伊弗利特拉向最近的斜點', (S2) => {
     const a = rfB(S2, 'P2B-F02'), c = rfB(S2, 'P2B-F03');
-    a[RR] = c[RR]; a[CC] = c[CC];
+    a[D3] = c[D3]; a[D4] = c[D4];
     const hw = S2.roll.howl2; a[hw] = rot([-8.5, 6.5], S2.roll.rotB);
     return a;
   }, {
     OT: '把伊弗利特拉向「離 2 號位最近的斜點」，你站他正前方。',
-    R: '站在離人群最遠的正點邊緣（與人群對角）：之後地火噴發 ② 由你放圈。',
-    C: '站在離人群最遠的另一個正點邊緣：之後地火噴發 ② 由你放圈。',
+    D3: '站在離人群最遠的正點邊緣（與人群對角）：之後地火噴發 ② 由你放圈。',
+    D4: '站在離人群最遠的另一個正點邊緣：之後地火噴發 ② 由你放圈。',
     def: '人群集中在 2 號位最近的斜點、伊弗利特背後。',
   }, 'P2B-F02');
   MV(86.8, 'hw2', '灼熱咆哮②：被點名補師去人群對面', (S2) => { const a = Array(8).fill(null); a[S2.roll.howl2] = rfB(S2, 'P2B-F02')[S2.roll.howl2]; return a; }, {
     H: '被點名灼熱咆哮的補師（30 秒、跳 5 次）：去人群所在處的場地另一端（約 36 遠）。',
     def: '留在原位。',
   }, 'P2B-F02', { preview: false });
-  MV(90.0, 'ep2b', '地火噴發②：R/C 沿邊緣前進', (S2) => { const a = rfB(S2, 'P2B-F04'); return only([[RR, a[RR]], [CC, a[CC]]]); }, {
-    R: '放完第 1 圈後沿場邊往伊弗利特方向移動。', C: '放完第 1 圈後沿場邊往伊弗利特方向移動。', def: '留在原位。',
+  MV(90.0, 'ep2b', '地火噴發②：D3/D4 沿邊緣前進', (S2) => { const a = rfB(S2, 'P2B-F04'); return only([[D3, a[D3]], [D4, a[D4]]]); }, {
+    D3: '放完第 1 圈後沿場邊往伊弗利特方向移動。', D4: '放完第 1 圈後沿場邊往伊弗利特方向移動。', def: '留在原位。',
   }, 'P2B-F04');
-  MV(92.0, 'ep2c', '地火噴發②：繼續前進', (S2) => { const a = rfB(S2, 'P2B-F05'); return only([[RR, a[RR]], [CC, a[CC]]]); }, { R: '沿場邊繼續移動。', C: '沿場邊繼續移動。', def: '留在原位。' }, 'P2B-F05');
-  MV(94.0, 'ep2d', '地火噴發②：第 4 圈', (S2) => { const a = rfB(S2, 'P2B-F06'); return only([[RR, a[RR]], [CC, a[CC]]]); }, { R: '放第 4 圈後準備回人群。', C: '放第 4 圈後準備回人群。', def: '留在原位。' }, 'P2B-F06');
+  MV(92.0, 'ep2c', '地火噴發②：繼續前進', (S2) => { const a = rfB(S2, 'P2B-F05'); return only([[D3, a[D3]], [D4, a[D4]]]); }, { D3: '沿場邊繼續移動。', D4: '沿場邊繼續移動。', def: '留在原位。' }, 'P2B-F05');
+  MV(94.0, 'ep2d', '地火噴發②：第 4 圈', (S2) => { const a = rfB(S2, 'P2B-F06'); return only([[D3, a[D3]], [D4, a[D4]]]); }, { D3: '放第 4 圈後準備回人群。', D4: '放第 4 圈後準備回人群。', def: '留在原位。' }, 'P2B-F06');
   MV(96.0, 'edge', '人群去場地邊緣斜點', (S2) => {
     const a = rfB(S2, 'P2B-F07');
     a[S2.roll.howl2] = null; a[S2.roll.howl1] = rfB(S2, 'P2B-F07')[S2.roll.howl1];
@@ -409,7 +409,7 @@ function build(S) {
   }, 'P2B-F09', { preview: false });
   MV(117.0, 'predash', '深紅旋風起跑點', (S2) => {
     const a = rf(S2, 'P2B-F12'), f10 = rf(S2, 'P2B-F10');
-    a[RR] = f10[RR];
+    a[D3] = f10[D3];
     return a;
   }, {
     def: '起跑點是「2 號位右手（逆時針）最近的正/斜點」；身上有灼熱咆哮的補師站在人群正對面。',
@@ -418,7 +418,7 @@ function build(S) {
   MV(126.5, 'run1', '深紅旋風：開始逆時針跑', (S2) => {
     const p = runPlan(S2.roll);
     const a = rf(S2, 'P2B-F12');
-    a[RR] = rf(S2, 'P2B-F10')[RR];
+    a[D3] = rf(S2, 'P2B-F10')[D3];
     const crowd = arcPos(p.s0 - 0.4 * p.arc, K.RUN_R), opp = arcPos(p.s0 + 180 - 0.4 * p.arc, K.RUN_R);
     return a.map((q, i) => (i === S2.roll.howl1 ? opp : crowd));
   }, {
@@ -436,22 +436,22 @@ function build(S) {
     return a;
   }, {
     MT: '把伊弗利特拉向人群所在方向的就近正點，站他正前方；烈焰焚燒 ×3 打你，要用死斗。',
-    R: '站到離伊弗利特最遠的場地邊緣（與 C 左右各一）：地火噴發 ③ 由你放圈。',
-    C: '站到離伊弗利特最遠的場地邊緣（與 R 左右各一）：地火噴發 ③ 由你放圈。',
+    D3: '站到離伊弗利特最遠的場地邊緣（與 D4 左右各一）：地火噴發 ③ 由你放圈。',
+    D4: '站到離伊弗利特最遠的場地邊緣（與 D3 左右各一）：地火噴發 ③ 由你放圈。',
     def: '人群站在伊弗利特背後（近中心），不要進他正面扇形。',
   }, 'P2B-F18');
   MV(135.0, 'hw1c', '補師回人群', (S2) => { const a = Array(8).fill(null); a[S2.roll.howl1] = rf(S2, 'P2B-F18', null, endRot(S2))[S2.roll.howl1]; return a; }, {
     H: '灼熱咆哮③結束（最後一跳 02:15 前後）：回到人群。', def: '留在原位。',
   }, 'P2B-F18', { preview: false });
   MV(149.5, 'pull4', '往人群那側的邊緣拉近', (S2) => { const a = rf(S2, 'P2B-F19', null, endRot(S2)); return a; }, { MT: '把伊弗利特往場地邊緣再拉 4。', def: '跟著往邊緣移動 4。' }, 'P2B-F19');
-  MV(152.4, 'ep3b', '地火噴發③：R/C 繞向人群', (S2) => { const a = rf(S2, 'P2B-F20', null, endRot(S2)); return only([[RR, a[RR]], [CC, a[CC]]]); }, {
-    R: '放完第 1 圈後沿場邊往人群方向移動。', C: '放完第 1 圈後沿場邊往人群方向移動。', def: '留在原位。',
+  MV(152.4, 'ep3b', '地火噴發③：D3/D4 繞向人群', (S2) => { const a = rf(S2, 'P2B-F20', null, endRot(S2)); return only([[D3, a[D3]], [D4, a[D4]]]); }, {
+    D3: '放完第 1 圈後沿場邊往人群方向移動。', D4: '放完第 1 圈後沿場邊往人群方向移動。', def: '留在原位。',
   }, 'P2B-F20');
   MV(154.4, 'ep3c', '集合', (S2) => rf(S2, 'P2B-F21', null, endRot(S2)), {
-    R: '繼續沿場邊移動並放圈。', C: '繼續沿場邊移動並放圈。', def: '其他人和 MT 在邊緣集合。',
+    D3: '繼續沿場邊移動並放圈。', D4: '繼續沿場邊移動並放圈。', def: '其他人和 MT 在邊緣集合。',
   }, 'P2B-F21');
-  MV(156.4, 'ep3d', '地火噴發③：第 4 圈', (S2) => { const a = rf(S2, 'P2B-F22', null, endRot(S2)); return only([[RR, a[RR]], [CC, a[CC]]]); }, {
-    R: '放第 4 圈後準備回人群。', C: '放第 4 圈後準備回人群。', def: '留在原位。',
+  MV(156.4, 'ep3d', '地火噴發③：第 4 圈', (S2) => { const a = rf(S2, 'P2B-F22', null, endRot(S2)); return only([[D3, a[D3]], [D4, a[D4]]]); }, {
+    D3: '放第 4 圈後準備回人群。', D4: '放第 4 圈後準備回人群。', def: '留在原位。',
   }, 'P2B-F22');
   MV(158.4, 'crush2', '全員集合：烈焰碎擊', (S2) => rf(S2, 'P2B-F23', null, endRot(S2)), { def: '全員（8 人）集合在邊緣分攤烈焰碎擊，至少 6 人。' }, 'P2B-F23');
 }
@@ -477,7 +477,7 @@ function tick(S, dt) {
 function objectives(S, slot) {
   const c = S.chars[slot], st = c.stats, k = c.slot, s = S.s, out = [];
   out.push({ ok: c.alive, text: '全程存活' });
-  if (k === RR || k === CC) out.push({ ok: (st.nailHits || 0) >= 4, text: `地火噴發的 4 個圓蓋到火獄之楔（${st.nailHits || 0}/4 次命中）` });
+  if (k === D3 || k === D4) out.push({ ok: (st.nailHits || 0) >= 4, text: `地火噴發的 4 個圓蓋到火獄之楔（${st.nailHits || 0}/4 次命中）` });
   out.push({ ok: !st.crushMiss, text: '烈焰碎擊：站進分攤圈' });
   out.push({ ok: !!s.woken, text: `伊弗利特覺醒（充能 ${s.charges || 0}/${K.CHARGES}）` });
   return out;
@@ -502,19 +502,19 @@ const CUES = [
   [26.4, '烈焰焚燒 ×3：只有 OT 站正面（開無敵）'],
   [39.9, '4 個火獄之楔出現：依攻略站位'],
   [46.0, '灼熱咆哮 ①點補師：被點名者去 2 號位邊緣'],
-  [51.2, '地火噴發（4 連）：R/C 在邊緣依序把圓覆蓋到火楔 1,2 再 3,4'],
+  [51.2, '地火噴發（4 連）：D3/D4 在邊緣依序把圓覆蓋到火楔 1,2 再 3,4'],
   [57.7, '依序擊殺火楔（被命中 2 次以上才充能）'],
   [71.0, '伊弗利特消失，覺醒前結束'],
   [75.4, '地獄之火炎'],
-  [79.5, 'OT 把伊弗利特拉向離 2 號位最近的斜點；R/C 去離人群最遠的正點'],
+  [79.5, 'OT 把伊弗利特拉向離 2 號位最近的斜點；D3/D4 去離人群最遠的正點'],
   [84.7, '灼熱咆哮 ②（30 秒）點另一名補師：去人群對面'],
-  [89.9, '地火噴發 ②：R/C 沿邊緣朝伊弗利特前進'],
+  [89.9, '地火噴發 ②：D3/D4 沿邊緣朝伊弗利特前進'],
   [96.9, '分身深紅旋風（十字俯衝）：人群在邊緣斜點'],
   [102.8, '灼熱咆哮 ③：補師去另一個正點邊緣'],
   [109.9, '烈焰碎擊點名 DPS：至少 6 人分攤'],
   [122.5, '深紅旋風 ×4＋覺醒十字：找藍色火焰本體；起跑點在 2 號位逆時針最近的正/斜點'],
   [134.8, 'MT 拉伊弗利特到就近正點；烈焰焚燒 ×3'],
-  [152.3, '地火噴發 ③：R/C 從伊弗利特對側沿邊緣繞向人群'],
+  [152.3, '地火噴發 ③：D3/D4 從伊弗利特對側沿邊緣繞向人群'],
   [159.2, '烈焰碎擊點名 DPS：全員集合分攤'],
   [166.5, '擊殺伊弗利特'],
 ];
@@ -533,6 +533,7 @@ const ROLE_DESC = [
 PHASES.p2 = {
   id: 'p2', name: 'P2 伊弗利特', short: '伊弗利特', preRoll: -3, end: K.END, maxCharges: K.CHARGES, chargeLabel: '覺醒',
   bossLook: 'ifrit', bossR: 3.5, activeTank: (S) => S.s.tank,
+  waymarks: { 2: [-16.3, 7] },   // 攻略 P2 的 2 號標點（預設標點以外）
   checkpoints: CHECKPOINTS, cues: CUES, roleDesc: ROLE_DESC,
   roll, setup, build, tick, objectives,
   start: () => { const a = fp('P2A-F01'); a[MT] = [0.3, -0.3]; return a; },

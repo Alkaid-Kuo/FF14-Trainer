@@ -3,7 +3,7 @@ SRC=sys.argv[1]   # 攻略的 frames.json
 d=json.load(open(SRC,encoding='utf-8'))
 R=20.0
 JOB={'战':0,'骑':1,'白':2,'学':3,'龙':4,'忍':5,'诗':6,'召':7}
-KEY=['MT','OT','H1','H2','M1','M2','R','C']
+KEY=['MT','OT','H1','H2','D1','D2','D3','D4']
 def sec(ts):
     m=re.match(r'(\d+)：(\d+)',ts)
     return int(m.group(1))*60+int(m.group(2)) if m else None

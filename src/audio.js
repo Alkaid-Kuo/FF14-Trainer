@@ -104,6 +104,7 @@ class Sfx {
         this.tone(1480, 0.22, { type: 'triangle', vol: 0.2, delay: 0.11 });
         break;
       case 'mark': this.tone(784, 0.12, { type: 'triangle', vol: 0.06 }); break;
+      case 'target': this.tone(1175, 0.05, { type: 'square', vol: 0.045 }); this.tone(1568, 0.07, { type: 'triangle', vol: 0.05, delay: 0.04 }); break;   // 選取目標
       case 'boom':
         this.noise(0.3 + 0.45 * p, { freq: 2200, freqTo: 140, vol: 0.12 + 0.3 * p });
         this.tone(110, 0.35 + 0.35 * p, { vol: 0.12 + 0.3 * p, slideTo: 38 });

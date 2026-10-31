@@ -126,6 +126,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #party:has(.who) .pm { grid-template-columns: 30px 58px 1fr auto; }
 #toast { position: absolute; left: 50%; top: 92px; transform: translateX(-50%); background: rgba(12,18,28,.92); border: 1px solid var(--line); border-radius: 10px; padding: 7px 16px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; white-space: nowrap; }
 #toast.show { opacity: 1; }
+#hostaway { position: absolute; left: 50%; top: 92px; transform: translateX(-50%); background: rgba(90,40,10,.94); border: 1px solid #ffb84d; color: #ffe2b0; border-radius: 10px; padding: 7px 16px; font-size: 13px; font-weight: 700; display: none; pointer-events: none; white-space: nowrap; z-index: 5; }
+#hostaway.show { display: block; }
 /* 自殺流：接受復活 */
 #raise { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); display: none; pointer-events: auto; font-size: 18px; padding: 10px 30px; border-radius: 999px; box-shadow: 0 6px 24px rgba(0,0,0,.5); text-align: center; line-height: 1.3; }
 #raise.show { display: block; }
@@ -205,6 +207,8 @@ label.chk { flex: 1; display: flex; align-items: center; gap: 6px; font-size: 12
 .roles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .role { background: #0f1622; border: 1px solid var(--line); border-radius: 10px; padding: 7px 0; font-weight: 800; color: #0a0f17; }
 .role.on { outline: 2px solid #fff; outline-offset: 1px; }
+.role small { display: block; font-size: 10px; font-weight: 600; line-height: 1.2; min-height: 12px; color: #0a0f17; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 3px; }
+.role.taken { filter: saturate(.55) brightness(.85); }
 #roledesc { margin: 8px 0 0; font-size: 12.5px; line-height: 1.55; color: #c3cfdf; background: #0f1622; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 select { width: 100%; background: #0f1622; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -270,6 +274,15 @@ details ul { padding-left: 18px; margin: 6px 0 0; }
 #keys { bottom: 100px; }
 /* 隊伍列表：點選當復活目標、讀條 */
 #party .pm { pointer-events: auto; cursor: pointer; position: relative; border-radius: 6px; padding: 0 2px; }
+#party .pm:hover { background: rgba(255,255,255,.06); }
+#party .pm.tg { box-shadow: 0 0 0 2px #5fe39a, 0 0 12px rgba(95,227,154,.55); background: rgba(95,227,154,.16); }
+#party .pm.tg::after { content: '目標'; position: absolute; right: -2px; top: -8px; font-size: 10px; font-weight: 800; color: #0a1a10; background: #5fe39a; border-radius: 4px; padding: 0 4px; line-height: 14px; }
+.perfinfo { margin: 6px 0 4px; font-size: 11.5px; line-height: 1.55; color: #b8c6d8; background: #0f1622; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-variant-numeric: tabular-nums; white-space: pre-line; }
+#tgline { min-height: 18px; font-size: 12px; color: #d8e4f2; background: rgba(12,18,28,.82); border: 1px solid var(--line); border-radius: 8px; padding: 1px 9px; visibility: hidden; white-space: nowrap; }
+#tgline.show { visibility: visible; }
+#tgline b { color: #5fe39a; font-weight: 800; }
+#tgline b.boss { color: #ff7a6a; }
+#slots .sk.aim { box-shadow: 0 0 0 2px #5fe39a, 0 0 12px rgba(95,227,154,.6); }
 #party .pm:hover { background: rgba(90,168,255,.08); }
 #party .pm.tg { box-shadow: 0 0 0 2px var(--accent2); background: rgba(255,216,102,.08); }
 .pm .cb { position: absolute; left: 39px; bottom: 0; width: 58px; height: 3px; border-radius: 2px; background: #223048; overflow: hidden; display: none; }

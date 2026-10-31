@@ -4,7 +4,8 @@
 'use strict';
 const T = root.THREE;
 const MD = root.UWU_MODELS, IC = root.UWU_ICONS;
-const { C, ROLES, WM_COLOR, ipos, irot } = root.UWU;
+const U = root.UWU;
+const { C, ROLES, WM_COLOR, ipos, irot } = U;
 const fxState = root.fxState;
 const PI = Math.PI;
 const FONT = '"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif';
@@ -314,6 +315,15 @@ class Renderer3D {
       const m = new T.Mesh(SH(new T.RingGeometry(0.88, 1, 48)), new T.MeshBasicMaterial({ color: 0x8fd0ff, transparent: true, opacity: 0.8, side: T.DoubleSide, depthWrite: false }));
       m.rotation.x = -PI / 2; m.position.y = 0.06; m.visible = false; this.scene.add(m); this.previewPool.push(m);
     }
+    // 目標圈：Boss（紅：背後缺口、兩側標記、前方箭頭）與隊友（綠）
+    const ringMesh = (kind) => {
+      const g = new T.Group();
+      const m = new T.Mesh(SH(new T.PlaneGeometry(2, 2)), new T.MeshBasicMaterial({ map: canvasTex(IC.targetRing(kind)), transparent: true, depthWrite: false, blending: T.AdditiveBlending, toneMapped: false, side: T.DoubleSide }));
+      m.rotation.x = -PI / 2; m.position.y = 0.08; m.renderOrder = 3;
+      g.add(m); g.visible = false; this.scene.add(g);
+      return g;
+    };
+    this.tRingBoss = ringMesh('enemy'); this.tRingAlly = ringMesh('ally');
     this.sim = null;
     this.Q = QUALITY.normal; this.quality = null;
     this.setQuality('normal');
@@ -754,6 +764,49 @@ class Renderer3D {
     tn.last = t;
   }
 
+  /** 效能資訊：上一幀的繪圖呼叫、三角形、畫布像素、像素比、顯示卡名稱。 */
+  perfInfo() {
+    const r = this.renderer, gl = r.getContext(), info = r.info.render, sz = r.getDrawingBufferSize(new T.Vector2());
+    if (this.gpuName === undefined) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      this.gpuName = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    }
+    return { calls: info.calls, tris: info.triangles, w: sz.x, h: sz.y, pr: r.getPixelRatio(), gpu: this.gpuName, quality: this.quality };
+  }
+  /** 點擊選取：3D 射線打到的 Boss（{ actor }）或隊友（{ slot }），沒有就 null。 */
+  pick(clientX, clientY, sim) {
+    const r = this.canvas.getBoundingClientRect();
+    const v = new T.Vector2((clientX - r.left) / r.width * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    const ray = this.raycaster || (this.raycaster = new T.Raycaster());
+    ray.setFromCamera(v, this.camera);
+    const targets = [], owner = new Map();
+    for (const [a, info] of this.actorObjs) if (a.visible && !a.dead) { targets.push(info.m.group); owner.set(info.m.group, { actor: a }); }
+    sim.chars.forEach((c, i) => { const g = this.charObjs[i].m.group; if (g.visible) { targets.push(g); owner.set(g, { slot: c.slot }); } });
+    for (const h of ray.intersectObjects(targets, true)) {
+      if (!h.object.isMesh || !h.object.visible) continue;
+      let ob = h.object;
+      while (ob && !owner.has(ob)) ob = ob.parent;
+      if (ob) return owner.get(ob);
+    }
+    return null;
+  }
+  /** 目標圈：Boss 跟著位置與面向（前方箭頭），隊友腳下綠圈。 */
+  updateTargetRings(sim, o, tsec) {
+    const IP = (e) => ipos(e, o.alpha);
+    const b = o.btarget === null ? null : U.bossList(sim).find((a) => a.id === o.btarget);
+    this.tRingBoss.visible = !!b;
+    if (b) {
+      const p = IP(b), k = U.hitboxR(sim, b) * 256 / IC.RING_R;
+      this.tRingBoss.position.set(p.x, 0, p.z); this.tRingBoss.rotation.y = irot(b, o.alpha); this.tRingBoss.scale.set(k, 1, k);
+    }
+    const c = o.atarget === null ? null : sim.chars[o.atarget];
+    this.tRingAlly.visible = !!c && (!o.solo || c.slot === sim.playerSlot);
+    if (this.tRingAlly.visible) {
+      const p = IP(c), k = (1.05 + 0.06 * Math.sin(tsec * 5)) * 256 / IC.RING_R;
+      this.tRingAlly.position.set(p.x, 0, p.z); this.tRingAlly.scale.set(k, 1, k);
+    }
+  }
+
   // ---------------------------------------------------------------- 鏡頭
   resize() {
     const r = this.canvas.getBoundingClientRect();
@@ -964,6 +1017,7 @@ class Renderer3D {
     for (const [a, info] of this.actorObjs) {
       if (!seen.has(a)) { this.scene.remove(info.m.group); disposeTree(info.m.group); this.actorObjs.delete(a); }
     }
+    this.updateTargetRings(sim, o, tsec);
     if (fireOn) {
       this.fireLight.position.set(fireOn.pos.x, 4, fireOn.pos.z);
       this.fireLight.intensity = 9 + Math.sin(tsec * 11) * 2 + Math.sin(tsec * 17) * 1.2;

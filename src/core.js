@@ -50,15 +50,15 @@ const ROLES = [
   { slot: 1, key: 'OT', name: '副坦 OT', kind: 'tank', color: '#2f63d8' },
   { slot: 2, key: 'H1', name: '補師 H1', kind: 'healer', color: '#49cf7a' },
   { slot: 3, key: 'H2', name: '補師 H2', kind: 'healer', color: '#9be04c' },
-  { slot: 4, key: 'M1', name: '近戰 M1', kind: 'dps', color: '#ff6b5e' },
-  { slot: 5, key: 'M2', name: '近戰 M2', kind: 'dps', color: '#ff9150' },
-  { slot: 6, key: 'R', name: '遠程 R', kind: 'dps', color: '#ff5f9e' },
-  { slot: 7, key: 'C', name: '法系 C', kind: 'dps', color: '#b27bff' },
+  { slot: 4, key: 'D1', name: '近戰 D1', kind: 'dps', color: '#ff6b5e' },
+  { slot: 5, key: 'D2', name: '近戰 D2', kind: 'dps', color: '#ff9150' },
+  { slot: 6, key: 'D3', name: '遠程 D3', kind: 'dps', color: '#ff5f9e' },
+  { slot: 7, key: 'D4', name: '法系 D4', kind: 'dps', color: '#b27bff' },
 ];
-const MT = 0, OT = 1, H1 = 2, H2 = 3, M1 = 4, M2 = 5, RR = 6, CC = 7;
+const MT = 0, OT = 1, H1 = 2, H2 = 3, D1 = 4, D2 = 5, D3 = 6, D4 = 7;
 /** 仇恨順序：坦克倒地時 Boss 改打下一個活著的人。 */
-const ENMITY = [MT, OT, M1, M2, RR, CC, H1, H2];
-const NON_TANKS = [H1, H2, M1, M2, RR, CC];
+const ENMITY = [MT, OT, D1, D2, D3, D4, H1, H2];
+const NON_TANKS = [H1, H2, D1, D2, D3, D4];
 
 /** 場地標點（攻略標準：A/B/C/D 在正點、1 號位在中心）。顏色照 FF14：A/1 紅、B/2 黃、C/3 藍、D/4 紫。 */
 const WM_COLOR = { A: '#ff4d4d', B: '#ffd23f', C: '#4da6ff', D: '#c46bff', 1: '#ff4d4d', 2: '#ffd23f', 3: '#4da6ff', 4: '#c46bff' };
@@ -509,7 +509,7 @@ class Sim {
     for (const a of this.avoid) {
       if (this.t < a.t0 || this.t > a.t1) continue;
       const ax = c.pos.x - a.x, az = c.pos.z - a.z, ad = Math.hypot(ax, az) || 0.001, R = a.r + 0.8;
-      if (ad > R + m + 0.2) continue;
+      if (ad > R + m + 0.2 || ad < a.r) continue;   // 已經在圓裡：直接走向目標出去，不要沿切線繞（會繞不出來）
       const inward = -(ux * ax + uz * az) / ad;
       if (inward <= 0) continue;
       const tx = -az / ad, tz = ax / ad, sgn = (ux * tx + uz * tz) >= 0 ? 1 : -1;
@@ -594,7 +594,7 @@ class Sim {
 root.UWU = {
   Sim, Actor, C, ROLES, PHASES, STATUS_DEF, PARTY_MIT, WAYMARKS, WM_COLOR, isTank, isHealer, dist, inCone, inRect, inCircle, inRing, segInfo,
   atBearing, bearingOf, norm360, ipos, irot, rotFromBearing, rotateXZ, mulberry32, hash01, shuffler, angDiff,
-  MT, OT, H1, H2, M1, M2, RR, CC, ENMITY, NON_TANKS,
+  MT, OT, H1, H2, D1, D2, D3, D4, ENMITY, NON_TANKS,
 };
 if (typeof module !== 'undefined' && module.exports) { require('./skills.js'); require('./ai.js'); module.exports = root.UWU; }
 })(typeof window !== 'undefined' ? window : globalThis);

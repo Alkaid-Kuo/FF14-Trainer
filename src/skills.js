@@ -1,14 +1,14 @@
 /* 技能：每個職位的技能列（GCD、讀條、冷卻、衝刺、防擊退、減傷、復活、極限技），以及 AI 隊友用技能
-   （自動復活、接受復活、團隊減傷、坦克減傷、補師 LB3、補師／C 的攻擊讀條）。
+   （自動復活、接受復活、團隊減傷、坦克減傷、補師 LB3、補師／D4 的攻擊讀條）。
    減傷只檢查使用時機（傷害不致死）；防擊退真的會擋掉擊退；衝刺真的加速。 */
 (function (root) {
 'use strict';
 const U = root.UWU;
-const { Sim, ROLES, dist, isTank, MT, OT, H1, H2, M1, M2, RR, CC } = U;
+const { Sim, ROLES, dist, isTank, MT, OT, H1, H2, D1, D2, D3, D4 } = U;
 
 const GCD = 2.5;
 const SLIDE = 0.5;                       // 讀條最後 0.5 秒可以移動（滑步）
-const RAISE_CAST = 8, RAISE_CAST_C = 10; // 補師 8 秒；C（赤魔）10 秒
+const RAISE_CAST = 8, RAISE_CAST_C = 10; // 補師 8 秒；D4（赤魔）10 秒
 const MELEE = 3;                         // 近戰距離：Boss 目標圈外 3 碼
 const RAISE_RANGE = 30;
 const LB_RATE = 1 / 50;                  // 極限技量表：開打後每 50 秒一格，最多 3 格
@@ -19,7 +19,7 @@ const SKILLS = {
   atk: { name: '攻擊', short: '攻擊', gcd: true, melee: true, tip: '近戰 GCD：要站在 Boss 身邊（目標圈外 3 碼內）' },
   shot: { name: '攻擊', short: '攻擊', gcd: true, tip: '遠程 GCD（瞬發）' },
   spell: { name: '詠唱攻擊', short: '詠唱', gcd: true, cast: 1.5, tip: '讀條 1.5 秒；讀條中移動會中斷（最後 0.5 秒可以滑步）' },
-  raise: { name: '復活', short: '復活', gcd: true, raise: true, tip: '讀條 8 秒（C 為 10 秒），先開即刻詠唱可瞬發；目標：點隊伍列表選，沒選就救最近的倒地者' },
+  raise: { name: '復活', short: '復活', gcd: true, raise: true, tip: '讀條 8 秒（D4 為 10 秒），先開即刻詠唱可瞬發；目標：點隊伍列表或場上的角色選，沒選就救最近的倒地者' },
   swift: { name: '即刻詠唱', short: '即刻', cd: 60, self: 'swift', dur: 10, tip: '下一個讀條技能變瞬發' },
   sprint: { name: '衝刺', short: '衝刺', cd: 60, self: 'sprint', dur: 10, tip: '移動速度 +30%，10 秒' },
   arms: { name: '親疏自行', short: '防擊退', cd: 120, self: 'antikb', dur: 6, tip: '6 秒內不會被擊退' },
@@ -40,20 +40,29 @@ const MELEE_KIT = ['atk', 'feint', 'arms', 'sprint', 'lb'];
 /** 各職位的技能列（依 slot）。 */
 const LOADOUT = [TANK_KIT, TANK_KIT, HEAL_KIT, HEAL_KIT, MELEE_KIT, MELEE_KIT,
   ['shot', 'troub', 'arms', 'sprint', 'lb'], ['spell', 'raise', 'swift', 'addle', 'sure', 'sprint', 'lb']];
-const RAISERS = [H1, H2, CC];
+const RAISERS = [H1, H2, D4];
 /** 極限技的種類（依職位）。 */
 const LB_KIND = ['tank', 'tank', 'healer', 'healer', 'melee', 'melee', 'ranged', 'caster'];
 const LB_NAME = { tank: '坦克', healer: '治療', melee: '近戰', ranged: '遠程', caster: '法系' };
 /** AI 輪流開團隊減傷的順序。 */
-const MIT_ORDER = [[RR, 'troub'], [H1, 'pmit'], [H2, 'pmit'], [CC, 'addle'], [M1, 'feint'], [M2, 'feint'], [MT, 'reprisal'], [OT, 'reprisal']];
+const MIT_ORDER = [[D3, 'troub'], [H1, 'pmit'], [H2, 'pmit'], [D4, 'addle'], [D1, 'feint'], [D2, 'feint'], [MT, 'reprisal'], [OT, 'reprisal']];
 const SELF_MIT = ['mit', 'invuln', 'lbtank'];
 
 // ---------------------------------------------------------------- 檢查（Sim 與連線的 Mirror 都能用）
-const castTime = (slot, id) => (SKILLS[id].raise ? (slot === CC ? RAISE_CAST_C : RAISE_CAST) : (SKILLS[id].cast || 0));
+const castTime = (slot, id) => (SKILLS[id].raise ? (slot === D4 ? RAISE_CAST_C : RAISE_CAST) : (SKILLS[id].cast || 0));
 /** 可以攻擊的目標（看得到、可選取；階段的 bossLook 可以是多種）。from：取離這個位置最近的。 */
-function bossOf(sim, from) {
+/** 目標圈半徑（Boss 體型）：主要 Boss 用階段的 bossR，P4 的小怪另外給。 */
+const HITBOX = { bit: 1.2, lahabrea: 1.6 };
+const hitboxR = (sim, a) => HITBOX[a.look] || sim.phase.bossR || 3;
+/** 可以選中的 Boss（依 phase.bossLook）。 */
+function bossList(sim) {
   const looks = [].concat(sim.phase.bossLook);
-  const list = sim.actors.filter((a) => looks.includes(a.look) && !a.dead && a.visible && a.targetable);
+  return sim.actors.filter((a) => looks.includes(a.look) && !a.dead && a.visible && a.targetable);
+}
+/** 攻擊對象：指定的 Boss（id，還能選中時）優先，否則離 from 最近的 Boss。 */
+function bossOf(sim, from, id) {
+  const list = bossList(sim);
+  if (id !== undefined && id !== null) { const b = list.find((a) => a.id === id); if (b) return b; }
   if (!from || list.length < 2) return list[0] || null;
   return list.sort((a, b) => dist(a.pos, from) - dist(b.pos, from))[0];
 }
@@ -66,7 +75,7 @@ function raiseTarget(sim, c, tg) {
   return sim.chars.filter(ok).sort((a, b) => dist(a.pos, c.pos) - dist(b.pos, c.pos))[0] || null;
 }
 /** 能不能用（不改變狀態）。回傳 {} 表示可以；否則 why＝原因（'' 表示不用提示），gcdWait＝GCD 還要等幾秒。 */
-function skillCheck(sim, slot, id, tg) {
+function skillCheck(sim, slot, id, tg, bt) {
   const c = sim.chars[slot], sk = SKILLS[id];
   if (!LOADOUT[slot].includes(id)) return { why: '沒有這個技能' };
   if (sim.t < 0) return { why: '還沒開打' };
@@ -77,7 +86,7 @@ function skillCheck(sim, slot, id, tg) {
   if (sk.gcd) {
     if (sim.t < c.gcdUntil) return { why: '', gcdWait: c.gcdUntil - sim.t };
     if (sk.raise) return raiseTarget(sim, c, tg) ? {} : { why: '沒有可以復活的對象' };
-    const b = bossOf(sim, c.pos);
+    const b = bossOf(sim, c.pos, bt);
     if (!b) return { why: '沒有可以攻擊的目標' };
     if (sk.melee && dist(b.pos, c.pos) > meleeReach(sim)) return { why: '距離太遠：近戰要站在 Boss 身邊' };
     return {};
@@ -94,7 +103,8 @@ P.initSkills = function (opts) {
   this.lb = opts.lb || 0;
   this.raids = []; this.aiQ = []; this.aiT = 0; this.wipeT = null; this.softFail = null;
   this.lbLog = [];   // 極限技使用紀錄：{ t, slot, kind, lv }（P4 拉哈布雷亞要特定種類的 LB3）
-  if (opts.carry) opts.carry.forEach((cd, i) => { this.chars[i].cd = Object.assign({}, cd); });
+  // 完整體驗接續上一階段的冷卻：carry 是剩餘秒數，換成這一階段的時鐘（這一階段從倒數 this.t 開始）
+  if (opts.carry) opts.carry.forEach((cd, i) => { const o = {}; for (const k of Object.keys(cd)) o[k] = cd[k] + this.t; this.chars[i].cd = o; });
 };
 P.speedMul = function (c) { return this.hasStatus(c.slot, 'sprint') ? 1.3 : 1; };
 P.canRaise = (slot) => LOADOUT[slot].includes('raise');
@@ -106,12 +116,12 @@ P.isMoving = function (c) {
   return c.walk > 0.3;
 };
 /** 使用技能。回傳 {}＝成功、{ queued }＝排進 GCD 佇列、否則 { why }。 */
-P.useSkill = function (slot, id, tg) {
+P.useSkill = function (slot, id, tg, bt) {
   if (this.status !== 'running') return { why: '' };
   const c = this.chars[slot], sk = SKILLS[id];
-  const chk = skillCheck(this, slot, id, tg);
+  const chk = skillCheck(this, slot, id, tg, bt);
   if (chk.why !== undefined) {
-    if (chk.gcdWait !== undefined && chk.gcdWait <= 0.5) { c.queued = { id, tg }; return { queued: true }; }
+    if (chk.gcdWait !== undefined && chk.gcdWait <= 0.5) { c.queued = { id, tg, bt }; return { queued: true }; }
     return chk;
   }
   if (sk.lb) { this.useLB(c); return {}; }
@@ -221,7 +231,7 @@ P.skillStep = function (dt) {
       } else if (k.ai && k.id === 'spell' && c.goal && t >= c.goalAt) { c.cast = null; c.gcdUntil = t; }   // AI 要移動：放棄攻擊讀條
       else if (t >= k.t1) { c.cast = null; this.skillDone(c, k.id, k.tg, Math.max(GCD, k.t1 - k.t0)); }
     }
-    if (c.queued && !c.cast && t >= c.gcdUntil) { const q = c.queued; c.queued = null; this.useSkill(c.slot, q.id, q.tg); }
+    if (c.queued && !c.cast && t >= c.gcdUntil) { const q = c.queued; c.queued = null; this.useSkill(c.slot, q.id, q.tg, q.bt); }
     if (!c.alive && c.raise && c.auto && !this.waitingPlan(c) && t - c.raise.t >= AI_ACCEPT_DELAY) this.acceptRaise(c.slot);
   }
   if (this.aiQ.length) {
@@ -231,7 +241,7 @@ P.skillStep = function (dt) {
   this.aiT -= dt;
   if (this.aiT <= 0) { this.aiT = 0.25; this.aiThink(); }
 };
-/** AI 隊友：救人、補師 LB3、補師／C 站著時讀攻擊（畫面用）。 */
+/** AI 隊友：救人、補師 LB3、補師／D4 站著時讀攻擊（畫面用）。 */
 P.aiThink = function () {
   const t = this.t;
   if (t < 0) return;
@@ -279,5 +289,5 @@ P.skillSummary = function (slot) {
 };
 
 U.SKILLS = SKILLS; U.SKILL_IDS = SKILL_IDS; U.LOADOUT = LOADOUT; U.RAISERS = RAISERS; U.GCD = GCD; U.LB_KIND = LB_KIND; U.LB_NAME = LB_NAME;
-U.skillCheck = skillCheck; U.bossOf = bossOf; U.meleeReach = meleeReach; U.castTime = castTime; U.raiseTarget = raiseTarget;
+U.skillCheck = skillCheck; U.bossOf = bossOf; U.bossList = bossList; U.hitboxR = hitboxR; U.meleeReach = meleeReach; U.castTime = castTime; U.raiseTarget = raiseTarget;
 })(typeof window !== 'undefined' ? window : globalThis);
