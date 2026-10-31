@@ -1,0 +1,29 @@
+# 複製成 ingress.yaml（已被 git 忽略）再填入自己的網域和 ClusterIssuer。
+# DNS 指好之後才套用：cert-manager 用 HTTP-01 申請憑證，網域解析不到會申請失敗。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ff14-trainer
+  namespace: ff14-trainer
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    # WebSocket 連線要撐完整場練習，nginx 預設 60 秒沒資料就會切斷
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - trainer.example.com
+      secretName: ff14-trainer-tls
+  rules:
+    - host: trainer.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ff14-trainer
+                port:
+                  name: http
