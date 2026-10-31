@@ -4,3 +4,5 @@ node_modules/
 !server/public/index.html
 !src/index.template.html
 shots/
+deploy/k8s/*.yaml
+!deploy/k8s/*.example.yaml

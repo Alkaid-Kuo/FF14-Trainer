@@ -14,9 +14,10 @@ FF14 絕神兵（P1 迦樓羅、P2 伊弗利特、P3 泰坦、P4 究極神兵）
 | `src/` | 原始碼：`core.js` 模擬核心、`skills.js` 技能（GCD、復活、極限技、AI 用技能）、`ai.js` 隊友閃避、`p1.js`～`p4.js` 各階段、`render2d.js`／`render3d.js` 畫面、`net.js` 連線同步、`ui.js` 介面 |
 | `vendor/three.min.js` | three.js r160 |
 | `build.py` | 打包成單一 HTML，輸出到 `server/public/index.html` |
-| `server/` | 連線伺服器：Cloudflare Worker＋Durable Object（`worker.js`）；`public/` 是網頁本體 |
+| `server/` | 連線伺服器：Cloudflare Worker＋Durable Object（`worker.js`）、自架用的 Node 版（`node-server.js`）；`public/` 是網頁本體 |
 | `wrangler.jsonc` | Cloudflare 部署設定 |
-| `tests/` | 模擬回歸測試（`node tests/test_p3.js 300`、`test_p4.js`；完整體驗 `test_chain.js`；繼續打模式的隨機擊殺壓力測試 `test_continue.js`） |
+| `Dockerfile`、`deploy/k8s/` | 自架 k8s 的 image 與部署設定 |
+| `tests/` | 模擬回歸測試（`node tests/test_p3.js 300`、`test_p4.js`；完整體驗 `test_chain.js`；繼續打模式的隨機擊殺壓力測試 `test_continue.js`；自架伺服器 `test_server.js`） |
 | `gen/` | 從攻略擷取站位用的腳本（P1～P3 用 frames.json，P4／P5 用攻略的 Markdown：`extract_md.py`＋`merge_md.py`） |
 
 ## 建置
@@ -39,6 +40,27 @@ python3 build.py
 4. 按 Deploy。完成後會拿到 `https://ff14-trainer.<帳號>.workers.dev`，把這個網址給隊友即可。
 
 之後每次推到 main 分支，Cloudflare 會自動重新部署，網址不變，大家重新整理就是新版。
+
+## 部署到自架 k8s
+
+用 `server/node-server.js`（行為跟 `worker.js` 相同，改動房間邏輯時兩邊都要改），沒有 Cloudflare 的免費額度限制。房間只放在記憶體，所以固定一個 Pod；更新時房間會清空，所有人要重新進房。
+
+第一次部署：把 `deploy/k8s/` 的兩個範例檔複製成 `app.yaml`、`ingress.yaml`，填入自己的 registry、網域和 ClusterIssuer。這兩個檔案已被 git 忽略，實際的位址不要提交。DNS 指好之後套用：
+
+```sh
+kubectl apply -f deploy/k8s/app.yaml -f deploy/k8s/ingress.yaml
+```
+
+更新版本（`<registry>` 換成自己的 registry，`<tag>` 換成新的標籤，例如日期加序號）：
+
+```sh
+python3 build.py
+podman build -t <registry>/ff14-trainer:<tag> .
+podman push <registry>/ff14-trainer:<tag>
+kubectl -n ff14-trainer set image deploy/ff14-trainer ff14-trainer=<registry>/ff14-trainer:<tag>
+```
+
+`app.yaml` 的 image 標籤不會跟著 `set image` 更新，重新套用前要先改成目前的版本，不然會退回舊版。
 
 ## 連線玩法
 

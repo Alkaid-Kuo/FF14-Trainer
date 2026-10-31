@@ -1,0 +1,9 @@
+{
+  "name": "ff14-trainer-server",
+  "private": true,
+  "description": "絕神兵練習器：自架用的連線伺服器（k8s）",
+  "main": "node-server.js",
+  "scripts": { "start": "node node-server.js" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "ws": "^8.18.0" }
+}

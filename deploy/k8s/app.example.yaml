@@ -1,0 +1,66 @@
+# 複製成 app.yaml（已被 git 忽略）再填入自己的 registry 和 image 標籤。
+# 絕神兵練習器：網頁＋連線伺服器。房間只放在記憶體，所以固定一個 Pod，更新時用 Recreate。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ff14-trainer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ff14-trainer
+  namespace: ff14-trainer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ff14-trainer
+  template:
+    metadata:
+      labels:
+        app: ff14-trainer
+    spec:
+      containers:
+        - name: ff14-trainer
+          image: registry.example.com/ff14-trainer:v1
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ff14-trainer
+  namespace: ff14-trainer
+spec:
+  selector:
+    app: ff14-trainer
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
