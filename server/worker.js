@@ -69,6 +69,7 @@ export class Room extends DurableObject {
     if (typeof data !== 'string') return;
     let msg;
     try { msg = JSON.parse(data); } catch (_) { return; }
+    if (!msg || typeof msg !== 'object') return;
     const me = ws.deserializeAttachment();
     const list = this.members();
     if (msg.t === 'xfer') {

@@ -15,6 +15,10 @@ const MAX_MEMBERS = 10;
 const MAX_MESSAGE = 1024 * 1024;
 const PING_MS = 30000;
 const ROOM_RE = /^[A-Z0-9]{4}$/;
+// 濫用上限：沒人的房間會刪掉，所以限制總連線數也就限制了房間數。
+// 最壞情況每條連線積 MAX_BUFFERED＋一則訊息（約 1.5 MB），100 條約 150 MB，壓在 Pod 的 256Mi 記憶體上限內
+const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS) || 100;
+const MAX_BUFFERED = 512 * 1024;
 
 const html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
 const gzipped = zlib.gzipSync(html);
@@ -24,6 +28,12 @@ const newId = () => Math.random().toString(36).slice(2, 8);
 
 /** 房號 → 房間。沒人的房間會刪掉。 */
 const rooms = new Map();
+
+/** 轉送給一位成員；對方收不完、積太多就斷線，不讓慢速客戶端把記憶體灌滿。 */
+function deliver(ws, data) {
+  if (ws.bufferedAmount > MAX_BUFFERED) { ws.terminate(); return; }
+  ws.send(data);
+}
 
 class Room {
   constructor(code) { this.code = code; this.sockets = new Set(); }
@@ -52,7 +62,7 @@ class Room {
     if (list.length && !list.some((m) => m.a.host)) list[0].a.host = true;
     const host = list.find((m) => m.a.host);
     const msg = JSON.stringify({ t: 'roster', host: host ? host.a.id : null, members: list.map((m) => ({ id: m.a.id, name: m.a.name })) });
-    for (const m of list) m.ws.send(msg);
+    for (const m of list) deliver(m.ws, msg);
   }
 
   message(ws, data) {
@@ -80,7 +90,7 @@ class Room {
     const to = msg.to || (me.host ? 'all' : 'host');
     for (const m of list) {
       if (m.ws === ws) continue;
-      if (to === 'all' || (to === 'host' && m.a.host) || to === m.a.id) m.ws.send(out);
+      if (to === 'all' || (to === 'host' && m.a.host) || to === m.a.id) deliver(m.ws, out);
     }
   }
 
@@ -126,6 +136,7 @@ server.on('upgrade', (req, socket, head) => {
   if (url.pathname !== '/ws') return refuse('404 Not Found');
   const code = (url.searchParams.get('room') || '').toUpperCase();
   if (!ROOM_RE.test(code)) return refuse('400 Bad Request');
+  if (wss.clients.size >= MAX_CONNECTIONS) return refuse('503 Service Unavailable');
   const name = (url.searchParams.get('name') || '玩家').trim().slice(0, 16) || '玩家';
   wss.handleUpgrade(req, socket, head, (ws) => {
     let room = rooms.get(code);
