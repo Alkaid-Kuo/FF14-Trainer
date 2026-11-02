@@ -60,7 +60,9 @@ podman push <registry>/ff14-trainer:<tag>
 kubectl -n ff14-trainer set image deploy/ff14-trainer ff14-trainer=<registry>/ff14-trainer:<tag>
 ```
 
-伺服器的連線測試：先 `cd server && npm ci`，再在專案根目錄執行 `node tests/test_server.js`。
+伺服器的連線測試：先 `cd server && npm ci`，再在專案根目錄執行 `node tests/test_server.js`。改了房間邏輯時，也要確認 `worker.js` 符合同一套協定：先開 `npx wrangler dev`，再用 `TEST_TARGET=127.0.0.1:8787 node tests/test_server.js` 執行。
+
+濫用上限：伺服器最多 100 條連線（環境變數 `MAX_CONNECTIONS` 可調），超過時回 503；對方收不完、送出緩衝積超過 512 KB 的連線會被斷線。調高連線數前，先確認 Pod 的記憶體上限夠用。
 
 `app.yaml` 的 image 標籤不會跟著 `set image` 更新，重新套用前要先改成目前的版本，不然會退回舊版。
 
